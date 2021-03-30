@@ -17,4 +17,5 @@ travis-ci = { repository = "staktrace/classparse" }
 maintenance = { status = "passively-maintained" }
 
 [dependencies]
+bitflags = "1.0"
 cesu8 = "1.1.0"

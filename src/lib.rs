@@ -196,7 +196,8 @@ fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Co
 fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: u16) -> Result<Vec<ConstantPoolEntry<'a>>, String> {
     let mut constant_pool = Vec::new();
     constant_pool.push(ConstantPoolEntry::Unused);
-    for _i in 1..constant_pool_count {
+    let mut cp_ix = 1;
+    while cp_ix < constant_pool_count {
         let constant_type = read_u1(bytes, ix)?;
         constant_pool.push(match constant_type {
             1 => read_constant_utf8(bytes, ix)?,
@@ -215,9 +216,11 @@ fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: 
             18 => read_constant_invokedynamic(bytes, ix)?,
             n => return Err(format!("Unexpected constant pool entry type {} at index {}", n, *ix - 1)),
         });
+        cp_ix += 1;
         if constant_type == 5 || constant_type == 6 {
             // long and double types take up two entries in the constant pool,
             // so eat up another index.
+            cp_ix += 1;
             constant_pool.push(ConstantPoolEntry::Unused);
         }
     }

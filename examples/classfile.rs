@@ -7,7 +7,8 @@ fn main() {
         let mut file = File::open(&arg).unwrap();
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes).unwrap();
+        println!("Dumping {:?}", arg);
         let class = classparse::parse_class(&bytes).unwrap();
-        println!("Dumping {:?}\n{:?}", arg, class);
+        println!("{:?}", class);
     }
 }

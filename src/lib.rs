@@ -112,7 +112,7 @@ fn read_constant_utf8<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoo
     }
     let modified_utf8_data = &bytes[*ix .. *ix + length];
     *ix += length;
-    Ok(ConstantPoolEntry::Utf8(cesu8::from_java_cesu8(modified_utf8_data).map_err(|e| format!("Error reading CONSTANT_Utf8: {}", e))?))
+    Ok(ConstantPoolEntry::Utf8(cesu8::from_java_cesu8(modified_utf8_data).map_err(|e| format!("Error reading CONSTANT_Utf8 at indices {}..{}: {}", *ix - length, *ix, e))?))
 }
 
 fn read_constant_integer<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
@@ -176,7 +176,7 @@ fn read_constant_methodhandle<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Con
         7 => ReferenceKind::InvokeSpecial,
         8 => ReferenceKind::NewInvokeSpecial,
         9 => ReferenceKind::InvokeInterface,
-        n => return Err(format!("Unexpected reference kind {} when reading CONSANT_methodhandle", n)),
+        n => return Err(format!("Unexpected reference kind {} when reading CONSANT_methodhandle at index {}", n, *ix - 1)),
     };
     let reference_ref = read_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::MethodHandle(reference_kind, reference_ref))
@@ -213,7 +213,7 @@ fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: 
             15 => read_constant_methodhandle(bytes, ix)?,
             16 => read_constant_methodtype(bytes, ix)?,
             18 => read_constant_invokedynamic(bytes, ix)?,
-            _ => return Err(format!("Unexpected constant pool entry type {:?}", constant_type)),
+            n => return Err(format!("Unexpected constant pool entry type {} at index {}", n, *ix - 1)),
         });
         if constant_type == 5 || constant_type == 6 {
             // long and double types take up two entries in the constant pool,

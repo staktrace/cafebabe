@@ -3,6 +3,8 @@ extern crate bitflags;
 extern crate cesu8;
 
 use std::borrow::Cow;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 fn err<T>(msg: &'static str) -> Result<T, String> {
     Err(msg.to_string())
@@ -61,11 +63,40 @@ fn read_u8(bytes: &[u8], ix: &mut usize) -> Result<u64, String> {
 #[derive(Debug)]
 pub enum ConstantPoolRef<'a> {
     Unresolved(u16),
-    Resolved(&'a ConstantPoolEntry<'a>),
+    Resolved(Rc<ConstantPoolEntry<'a>>),
 }
 
-fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolRef<'a>, String> {
-    Ok(ConstantPoolRef::Unresolved(read_u2(bytes, ix)?))
+impl<'a> ConstantPoolRef<'a> {
+    fn resolve(&mut self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String> {
+        match self {
+            ConstantPoolRef::Unresolved(ix) => {
+                let target = *ix as usize;
+                if target == my_index {
+                    return Err(format!("Constant pool entry at index {} could not be resolved due to self-reference", my_index));
+                }
+                if target >= pool.len() {
+                    return Err(format!("Constant pool entry at index {} references out-of-bounds index {}", my_index, target));
+                }
+                if !pool[target].is_resolved() {
+                    return Ok(false);
+                }
+                *self = ConstantPoolRef::Resolved(pool[target].clone());
+                Ok(true)
+            }
+            ConstantPoolRef::Resolved(_) => Ok(true),
+        }
+    }
+
+    fn is_resolved(&self) -> bool {
+        match self {
+            ConstantPoolRef::Unresolved(_) => false,
+            ConstantPoolRef::Resolved(_) => true,
+        }
+    }
+}
+
+fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
+    Ok(RefCell::new(ConstantPoolRef::Unresolved(read_u2(bytes, ix)?)))
 }
 
 #[derive(Debug)]
@@ -94,15 +125,47 @@ pub enum ConstantPoolEntry<'a> {
     Float(f32),
     Long(i64),
     Double(f64),
-    ClassInfo(ConstantPoolRef<'a>),
-    String(ConstantPoolRef<'a>),
-    FieldRef(ConstantPoolRef<'a>, ConstantPoolRef<'a>),
-    MethodRef(ConstantPoolRef<'a>, ConstantPoolRef<'a>),
-    InterfaceMethodRef(ConstantPoolRef<'a>, ConstantPoolRef<'a>),
-    NameAndType(ConstantPoolRef<'a>, ConstantPoolRef<'a>),
-    MethodHandle(ReferenceKind, ConstantPoolRef<'a>),
-    MethodType(ConstantPoolRef<'a>),
-    InvokeDynamic(BootstrapMethodRef, ConstantPoolRef<'a>),
+    ClassInfo(RefCell<ConstantPoolRef<'a>>),
+    String(RefCell<ConstantPoolRef<'a>>),
+    FieldRef(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
+    MethodRef(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
+    InterfaceMethodRef(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
+    NameAndType(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
+    MethodHandle(ReferenceKind, RefCell<ConstantPoolRef<'a>>),
+    MethodType(RefCell<ConstantPoolRef<'a>>),
+    InvokeDynamic(BootstrapMethodRef, RefCell<ConstantPoolRef<'a>>),
+}
+
+impl<'a> ConstantPoolEntry<'a> {
+    fn resolve(&self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String> {
+        match self {
+            ConstantPoolEntry::ClassInfo(x) => x.borrow_mut().resolve(my_index, pool),
+            ConstantPoolEntry::String(x) => x.borrow_mut().resolve(my_index, pool),
+            ConstantPoolEntry::FieldRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
+            ConstantPoolEntry::MethodRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
+            ConstantPoolEntry::MethodHandle(_, x) => x.borrow_mut().resolve(my_index, pool),
+            ConstantPoolEntry::MethodType(x) => x.borrow_mut().resolve(my_index, pool),
+            ConstantPoolEntry::InvokeDynamic(_, x) => x.borrow_mut().resolve(my_index, pool),
+            _ => Ok(true),
+        }
+    }
+
+    fn is_resolved(&self) -> bool {
+        match self {
+            ConstantPoolEntry::ClassInfo(x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::String(x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::FieldRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
+            ConstantPoolEntry::MethodRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
+            ConstantPoolEntry::NameAndType(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
+            ConstantPoolEntry::MethodHandle(_, x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::MethodType(x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::InvokeDynamic(_, x) => x.borrow().is_resolved(),
+            _ => true,
+        }
+    }
 }
 
 fn read_constant_utf8<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
@@ -193,13 +256,13 @@ fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Co
     Ok(ConstantPoolEntry::InvokeDynamic(bootstrap_method_ref, name_and_type_ref))
 }
 
-fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: u16) -> Result<Vec<ConstantPoolEntry<'a>>, String> {
+fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: u16) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
     let mut constant_pool = Vec::new();
-    constant_pool.push(ConstantPoolEntry::Unused);
+    constant_pool.push(Rc::new(ConstantPoolEntry::Unused));
     let mut cp_ix = 1;
     while cp_ix < constant_pool_count {
         let constant_type = read_u1(bytes, ix)?;
-        constant_pool.push(match constant_type {
+        constant_pool.push(Rc::new(match constant_type {
             1 => read_constant_utf8(bytes, ix)?,
             3 => read_constant_integer(bytes, ix)?,
             4 => read_constant_float(bytes, ix)?,
@@ -215,19 +278,19 @@ fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: 
             16 => read_constant_methodtype(bytes, ix)?,
             18 => read_constant_invokedynamic(bytes, ix)?,
             n => return Err(format!("Unexpected constant pool entry type {} at index {}", n, *ix - 1)),
-        });
+        }));
         cp_ix += 1;
         if constant_type == 5 || constant_type == 6 {
             // long and double types take up two entries in the constant pool,
             // so eat up another index.
             cp_ix += 1;
-            constant_pool.push(ConstantPoolEntry::Unused);
+            constant_pool.push(Rc::new(ConstantPoolEntry::Unused));
         }
     }
     Ok(constant_pool)
 }
 
-fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16) -> Result<Vec<ConstantPoolRef<'a>>, String> {
+fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16) -> Result<Vec<RefCell<ConstantPoolRef<'a>>>, String> {
     let mut interfaces = Vec::new();
     for _i in 0..interfaces_count {
         interfaces.push(read_cp_ref(bytes, ix)?);
@@ -237,7 +300,7 @@ fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16) -
 
 #[derive(Debug)]
 pub struct AttributeInfo<'a> {
-    pub name: ConstantPoolRef<'a>,
+    name: RefCell<ConstantPoolRef<'a>>,
     info: &'a [u8],
 }
 
@@ -299,8 +362,8 @@ bitflags! {
 #[derive(Debug)]
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
-    pub name: ConstantPoolRef<'a>,
-    pub descriptor: ConstantPoolRef<'a>,
+    pub name: RefCell<ConstantPoolRef<'a>>,
+    pub descriptor: RefCell<ConstantPoolRef<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -342,8 +405,8 @@ bitflags! {
 #[derive(Debug)]
 pub struct MethodInfo<'a> {
     pub access_flags: MethodAccessFlags,
-    pub name: ConstantPoolRef<'a>,
-    pub descriptor: ConstantPoolRef<'a>,
+    pub name: RefCell<ConstantPoolRef<'a>>,
+    pub descriptor: RefCell<ConstantPoolRef<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -382,14 +445,33 @@ bitflags! {
 pub struct ClassFile<'a> {
     pub major_version: u16,
     pub minor_version: u16,
-    pub constant_pool: Vec<ConstantPoolEntry<'a>>,
+    pub constant_pool: Vec<Rc<ConstantPoolEntry<'a>>>,
     pub access_flags: ClassAccessFlags,
-    pub this_class: ConstantPoolRef<'a>,
-    pub super_class: ConstantPoolRef<'a>,
-    pub interfaces: Vec<ConstantPoolRef<'a>>,
+    pub this_class: RefCell<ConstantPoolRef<'a>>,
+    pub super_class: RefCell<ConstantPoolRef<'a>>,
+    pub interfaces: Vec<RefCell<ConstantPoolRef<'a>>>,
     pub fields: Vec<FieldInfo<'a>>,
     pub methods: Vec<MethodInfo<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
+}
+
+impl<'a> ClassFile<'a> {
+    fn resolve(&self) -> Result<(), String> {
+        let mut resolved_count = 0;
+        while resolved_count < self.constant_pool.len() {
+            let mut count = 0;
+            for (i, cp_entry) in self.constant_pool.iter().enumerate() {
+                if cp_entry.resolve(i, &self.constant_pool)? {
+                    count += 1;
+                }
+            }
+            if count == resolved_count {
+                return err("Unable to resolve all constant pool entries");
+            }
+            resolved_count = count;
+        }
+        Ok(())
+    }
 }
 
 pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
@@ -413,7 +495,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     let attributes_count = read_u2(raw_bytes, &mut ix)?;
     let attributes = read_attributes(raw_bytes, &mut ix, attributes_count)?;
 
-    Ok(ClassFile {
+    let class_file = ClassFile {
         major_version,
         minor_version,
         constant_pool,
@@ -424,5 +506,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
         fields,
         methods,
         attributes,
-    })
+    };
+    class_file.resolve()?;
+    Ok(class_file)
 }

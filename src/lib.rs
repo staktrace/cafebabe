@@ -304,6 +304,15 @@ pub struct AttributeInfo<'a> {
     info: &'a [u8],
 }
 
+impl<'a> AttributeInfo<'a> {
+    fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
+        if !self.name.borrow_mut().resolve(resolved_count, pool)? {
+            return Err(format!("Unable to resolve name field for {}", desc));
+        }
+        Ok(())
+    }
+}
+
 fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for _i in 0..attributes_count {
@@ -367,6 +376,21 @@ pub struct FieldInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
+impl<'a> FieldInfo<'a> {
+    fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
+        if !self.name.borrow_mut().resolve(resolved_count, pool)? {
+            return Err(format!("Unable to resolve name field for {}", desc));
+        }
+        if !self.descriptor.borrow_mut().resolve(resolved_count, pool)? {
+            return Err(format!("Unable to resolve descriptor field for {}", desc));
+        }
+        for (i, attribute) in self.attributes.iter().enumerate() {
+            attribute.resolve(resolved_count, &format!("attribute index {} of {}", i, desc), pool)?;
+        }
+        Ok(())
+    }
+}
+
 fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, fields_count: u16) -> Result<Vec<FieldInfo<'a>>, String> {
     let mut fields = Vec::new();
     for _i in 0..fields_count {
@@ -408,6 +432,21 @@ pub struct MethodInfo<'a> {
     pub name: RefCell<ConstantPoolRef<'a>>,
     pub descriptor: RefCell<ConstantPoolRef<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
+}
+
+impl<'a> MethodInfo<'a> {
+    fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
+        if !self.name.borrow_mut().resolve(resolved_count, pool)? {
+            return Err(format!("Unable to resolve name field for {}", desc));
+        }
+        if !self.descriptor.borrow_mut().resolve(resolved_count, pool)? {
+            return Err(format!("Unable to resolve descriptor field for {}", desc));
+        }
+        for (i, attribute) in self.attributes.iter().enumerate() {
+            attribute.resolve(resolved_count, &format!("attribute index {} of {}", i, desc), pool)?;
+        }
+        Ok(())
+    }
 }
 
 fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, methods_count: u16) -> Result<Vec<MethodInfo<'a>>, String> {
@@ -469,6 +508,27 @@ impl<'a> ClassFile<'a> {
                 return err("Unable to resolve all constant pool entries");
             }
             resolved_count = count;
+        }
+
+        if !self.this_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
+            return err("Unable to resolve constant pool reference in this_class");
+        }
+        if !self.super_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
+            return err("Unable to resolve constant pool reference in super_class");
+        }
+        for (i, interface) in self.interfaces.iter().enumerate() {
+            if !interface.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
+                return Err(format!("Unable to resolve constant pool reference in interface {}", i));
+            }
+        }
+        for (i, field) in self.fields.iter().enumerate() {
+            field.resolve(resolved_count, &format!("field index {}", i), &self.constant_pool)?;
+        }
+        for (i, method) in self.methods.iter().enumerate() {
+            method.resolve(resolved_count, &format!("method index {}", i), &self.constant_pool)?;
+        }
+        for (i, attribute) in self.attributes.iter().enumerate() {
+            attribute.resolve(resolved_count, &format!("attribute index {}", i), &self.constant_pool)?;
         }
         Ok(())
     }

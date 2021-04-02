@@ -61,7 +61,7 @@ fn read_u8(bytes: &[u8], ix: &mut usize) -> Result<u64, String> {
 }
 
 #[derive(Debug)]
-pub enum ConstantPoolRef<'a> {
+enum ConstantPoolRef<'a> {
     Unresolved(u16),
     Resolved(Rc<ConstantPoolEntry<'a>>),
 }
@@ -100,7 +100,7 @@ fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPo
 }
 
 #[derive(Debug)]
-pub enum BootstrapMethodRef {
+enum BootstrapMethodRef {
     Unresolved(u16),
 }
 
@@ -118,7 +118,7 @@ pub enum ReferenceKind {
 }
 
 #[derive(Debug)]
-pub enum ConstantPoolEntry<'a> {
+enum ConstantPoolEntry<'a> {
     Unused,
     Utf8(Cow<'a, str>),
     Integer(i32),
@@ -371,8 +371,8 @@ bitflags! {
 #[derive(Debug)]
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
-    pub name: RefCell<ConstantPoolRef<'a>>,
-    pub descriptor: RefCell<ConstantPoolRef<'a>>,
+    name: RefCell<ConstantPoolRef<'a>>,
+    descriptor: RefCell<ConstantPoolRef<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -429,8 +429,8 @@ bitflags! {
 #[derive(Debug)]
 pub struct MethodInfo<'a> {
     pub access_flags: MethodAccessFlags,
-    pub name: RefCell<ConstantPoolRef<'a>>,
-    pub descriptor: RefCell<ConstantPoolRef<'a>>,
+    name: RefCell<ConstantPoolRef<'a>>,
+    descriptor: RefCell<ConstantPoolRef<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -484,11 +484,11 @@ bitflags! {
 pub struct ClassFile<'a> {
     pub major_version: u16,
     pub minor_version: u16,
-    pub constant_pool: Vec<Rc<ConstantPoolEntry<'a>>>,
+    constant_pool: Vec<Rc<ConstantPoolEntry<'a>>>,
     pub access_flags: ClassAccessFlags,
-    pub this_class: RefCell<ConstantPoolRef<'a>>,
-    pub super_class: RefCell<ConstantPoolRef<'a>>,
-    pub interfaces: Vec<RefCell<ConstantPoolRef<'a>>>,
+    this_class: RefCell<ConstantPoolRef<'a>>,
+    super_class: RefCell<ConstantPoolRef<'a>>,
+    interfaces: Vec<RefCell<ConstantPoolRef<'a>>>,
     pub fields: Vec<FieldInfo<'a>>,
     pub methods: Vec<MethodInfo<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,

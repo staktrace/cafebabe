@@ -384,6 +384,23 @@ fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: 
     Ok(constant_pool)
 }
 
+fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
+    let mut resolved_count = 0;
+    while resolved_count < constant_pool.len() {
+        let mut count = 0;
+        for (i, cp_entry) in constant_pool.iter().enumerate() {
+            if cp_entry.resolve(i, &constant_pool)? {
+                count += 1;
+            }
+        }
+        if count == resolved_count {
+            return err("Unable to resolve all constant pool entries");
+        }
+        resolved_count = count;
+    }
+    Ok(())
+}
+
 fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16) -> Result<Vec<RefCell<ConstantPoolRef<'a>>>, String> {
     let mut interfaces = Vec::new();
     for _i in 0..interfaces_count {
@@ -613,19 +630,7 @@ pub struct ClassFile<'a> {
 
 impl<'a> ClassFile<'a> {
     fn resolve(&self) -> Result<(), String> {
-        let mut resolved_count = 0;
-        while resolved_count < self.constant_pool.len() {
-            let mut count = 0;
-            for (i, cp_entry) in self.constant_pool.iter().enumerate() {
-                if cp_entry.resolve(i, &self.constant_pool)? {
-                    count += 1;
-                }
-            }
-            if count == resolved_count {
-                return err("Unable to resolve all constant pool entries");
-            }
-            resolved_count = count;
-        }
+        let resolved_count = self.constant_pool.len();
 
         if !resolve_cp_ref(&self.this_class, resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in this_class");
@@ -681,6 +686,8 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     let minor_version = read_u2(raw_bytes, &mut ix)?;
     let constant_pool_count = read_u2(raw_bytes, &mut ix)?;
     let constant_pool = read_constant_pool(raw_bytes, &mut ix, constant_pool_count)?;
+    resolve_constant_pool(&constant_pool)?;
+
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
     let this_class = read_cp_ref(raw_bytes, &mut ix)?;
     let super_class = read_cp_ref(raw_bytes, &mut ix)?;

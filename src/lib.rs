@@ -106,6 +106,22 @@ fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPo
     Ok(RefCell::new(ConstantPoolRef::Unresolved(read_u2(bytes, ix)?)))
 }
 
+fn resolve_cp_ref<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String> {
+    cp_ref.borrow_mut().resolve(cp_index, pool)
+}
+
+fn cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>) -> ConstantPoolEntryTypes {
+    cp_ref.borrow().get().get_type()
+}
+
+fn validate_cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, valid: ConstantPoolEntryTypes) -> Result<bool, String> {
+    if valid.contains(cp_ref_type(cp_ref)) {
+        Ok(true)
+    } else {
+        err("Unexpected constant pool reference type for")
+    }
+}
+
 #[derive(Debug)]
 enum BootstrapMethodRef {
     Unresolved(u16),
@@ -171,15 +187,15 @@ enum ConstantPoolEntry<'a> {
 impl<'a> ConstantPoolEntry<'a> {
     fn resolve(&self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => x.borrow_mut().resolve(my_index, pool),
-            ConstantPoolEntry::String(x) => x.borrow_mut().resolve(my_index, pool),
-            ConstantPoolEntry::FieldRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
-            ConstantPoolEntry::MethodRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
-            ConstantPoolEntry::MethodHandle(_, y) => y.borrow_mut().resolve(my_index, pool),
-            ConstantPoolEntry::MethodType(x) => x.borrow_mut().resolve(my_index, pool),
-            ConstantPoolEntry::InvokeDynamic(_, y) => y.borrow_mut().resolve(my_index, pool),
+            ConstantPoolEntry::ClassInfo(x) => resolve_cp_ref(x, my_index, pool),
+            ConstantPoolEntry::String(x) => resolve_cp_ref(x, my_index, pool),
+            ConstantPoolEntry::FieldRef(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
+            ConstantPoolEntry::MethodRef(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
+            ConstantPoolEntry::MethodHandle(_, y) => resolve_cp_ref(y, my_index, pool),
+            ConstantPoolEntry::MethodType(x) => resolve_cp_ref(x, my_index, pool),
+            ConstantPoolEntry::InvokeDynamic(_, y) => resolve_cp_ref(y, my_index, pool),
             _ => Ok(true),
         }
     }
@@ -243,18 +259,6 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::InvokeDynamic(_, y) => validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE),
             _ => Ok(true),
         }
-    }
-}
-
-fn cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>) -> ConstantPoolEntryTypes {
-    cp_ref.borrow().get().get_type()
-}
-
-fn validate_cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, valid: ConstantPoolEntryTypes) -> Result<bool, String> {
-    if valid.contains(cp_ref_type(cp_ref)) {
-        Ok(true)
-    } else {
-        err("Unexpected constant pool reference type for")
     }
 }
 
@@ -396,7 +400,7 @@ pub struct AttributeInfo<'a> {
 
 impl<'a> AttributeInfo<'a> {
     fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
-        if !self.name.borrow_mut().resolve(resolved_count, pool)? {
+        if !resolve_cp_ref(&self.name, resolved_count, pool)? {
             return Err(format!("Unable to resolve name field for {}", desc));
         }
         Ok(())
@@ -473,10 +477,10 @@ pub struct FieldInfo<'a> {
 
 impl<'a> FieldInfo<'a> {
     fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
-        if !self.name.borrow_mut().resolve(resolved_count, pool)? {
+        if !resolve_cp_ref(&self.name, resolved_count, pool)? {
             return Err(format!("Unable to resolve name field for {}", desc));
         }
-        if !self.descriptor.borrow_mut().resolve(resolved_count, pool)? {
+        if !resolve_cp_ref(&self.descriptor, resolved_count, pool)? {
             return Err(format!("Unable to resolve descriptor field for {}", desc));
         }
         for (i, attribute) in self.attributes.iter().enumerate() {
@@ -540,10 +544,10 @@ pub struct MethodInfo<'a> {
 
 impl<'a> MethodInfo<'a> {
     fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
-        if !self.name.borrow_mut().resolve(resolved_count, pool)? {
+        if !resolve_cp_ref(&self.name, resolved_count, pool)? {
             return Err(format!("Unable to resolve name field for {}", desc));
         }
-        if !self.descriptor.borrow_mut().resolve(resolved_count, pool)? {
+        if !resolve_cp_ref(&self.descriptor, resolved_count, pool)? {
             return Err(format!("Unable to resolve descriptor field for {}", desc));
         }
         for (i, attribute) in self.attributes.iter().enumerate() {
@@ -623,14 +627,14 @@ impl<'a> ClassFile<'a> {
             resolved_count = count;
         }
 
-        if !self.this_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
+        if !resolve_cp_ref(&self.this_class, resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in this_class");
         }
-        if !self.super_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
+        if !resolve_cp_ref(&self.super_class, resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in super_class");
         }
         for (i, interface) in self.interfaces.iter().enumerate() {
-            if !interface.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
+            if !resolve_cp_ref(interface, resolved_count, &self.constant_pool)? {
                 return Err(format!("Unable to resolve constant pool reference in interface {}", i));
             }
         }

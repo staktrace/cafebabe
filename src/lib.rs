@@ -239,7 +239,7 @@ fn read_constant_methodhandle<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Con
         7 => ReferenceKind::InvokeSpecial,
         8 => ReferenceKind::NewInvokeSpecial,
         9 => ReferenceKind::InvokeInterface,
-        n => return Err(format!("Unexpected reference kind {} when reading CONSANT_methodhandle at index {}", n, *ix - 1)),
+        n => return Err(format!("Unexpected reference kind {} when reading CONSTANT_methodhandle at index {}", n, *ix - 1)),
     };
     let reference_ref = read_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::MethodHandle(reference_kind, reference_ref))

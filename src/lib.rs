@@ -119,7 +119,7 @@ pub enum ReferenceKind {
 
 #[derive(Debug)]
 enum ConstantPoolEntry<'a> {
-    Unused,
+    Zero,
     Utf8(Cow<'a, str>),
     Integer(i32),
     Float(f32),
@@ -134,6 +134,7 @@ enum ConstantPoolEntry<'a> {
     MethodHandle(ReferenceKind, RefCell<ConstantPoolRef<'a>>),
     MethodType(RefCell<ConstantPoolRef<'a>>),
     InvokeDynamic(BootstrapMethodRef, RefCell<ConstantPoolRef<'a>>),
+    Unused,
 }
 
 impl<'a> ConstantPoolEntry<'a> {
@@ -258,7 +259,7 @@ fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Co
 
 fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: u16) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
     let mut constant_pool = Vec::new();
-    constant_pool.push(Rc::new(ConstantPoolEntry::Unused));
+    constant_pool.push(Rc::new(ConstantPoolEntry::Zero));
     let mut cp_ix = 1;
     while cp_ix < constant_pool_count {
         let constant_type = read_u1(bytes, ix)?;

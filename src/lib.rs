@@ -144,6 +144,7 @@ bitflags! {
         const UNUSED = 0x8000;
 
         const SUPERCLASS = Self::ZERO.bits() | Self::CLASS_INFO.bits();
+        const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
     }
 }
 
@@ -218,17 +219,42 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::Unused => ConstantPoolEntryTypes::UNUSED,
         }
     }
+
+    fn validate(&self, major_version: u16) -> Result<bool, String> {
+        match self {
+            ConstantPoolEntry::ClassInfo(x) => validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::String(x) => validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::FieldRef(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::CLASS_INFO)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::MethodRef(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::CLASS_INFO)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::CLASS_INFO)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::UTF8)?),
+            ConstantPoolEntry::MethodHandle(x, y) => validate_cp_ref_type(y, match x {
+                ReferenceKind::GetField |
+                ReferenceKind::GetStatic |
+                ReferenceKind::PutField |
+                ReferenceKind::PutStatic => ConstantPoolEntryTypes::FIELD_REF,
+                ReferenceKind::InvokeVirtual |
+                ReferenceKind::NewInvokeSpecial => ConstantPoolEntryTypes::METHOD_REF,
+                ReferenceKind::InvokeStatic |
+                ReferenceKind::InvokeSpecial => if major_version < 52 { ConstantPoolEntryTypes::METHOD_REF } else { ConstantPoolEntryTypes::NEW_METHOD_REFS },
+                ReferenceKind::InvokeInterface => ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
+            }),
+            ConstantPoolEntry::MethodType(x) => validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::InvokeDynamic(_, y) => validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE),
+            _ => Ok(true),
+        }
+    }
 }
 
 fn cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>) -> ConstantPoolEntryTypes {
     cp_ref.borrow().get().get_type()
 }
 
-fn validate_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, valid: ConstantPoolEntryTypes, desc: &str) -> Result<(), String> {
+fn validate_cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, valid: ConstantPoolEntryTypes) -> Result<bool, String> {
     if valid.contains(cp_ref_type(cp_ref)) {
-        Ok(())
+        Ok(true)
     } else {
-        Err(format!("Unexpected constant pool reference type for {}", desc))
+        err("Unexpected constant pool reference type for")
     }
 }
 
@@ -375,6 +401,11 @@ impl<'a> AttributeInfo<'a> {
         }
         Ok(())
     }
+
+    fn validate(&self) -> Result<(), String> {
+        validate_cp_ref_type(&self.name, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        Ok(())
+    }
 }
 
 fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16) -> Result<Vec<AttributeInfo<'a>>, String> {
@@ -453,6 +484,15 @@ impl<'a> FieldInfo<'a> {
         }
         Ok(())
     }
+
+    fn validate(&self) -> Result<(), String> {
+        validate_cp_ref_type(&self.name, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        validate_cp_ref_type(&self.descriptor, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
+        for (i, attribute) in self.attributes.iter().enumerate() {
+            attribute.validate().map_err(|e| format!("{} attribute {} of", e, i))?;
+        }
+        Ok(())
+    }
 }
 
 fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, fields_count: u16) -> Result<Vec<FieldInfo<'a>>, String> {
@@ -508,6 +548,15 @@ impl<'a> MethodInfo<'a> {
         }
         for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.resolve(resolved_count, &format!("attribute index {} of {}", i, desc), pool)?;
+        }
+        Ok(())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        validate_cp_ref_type(&self.name, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        validate_cp_ref_type(&self.descriptor, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
+        for (i, attribute) in self.attributes.iter().enumerate() {
+            attribute.validate().map_err(|e| format!("{} attribute {} of", e, i))?;
         }
         Ok(())
     }
@@ -573,28 +622,35 @@ impl<'a> ClassFile<'a> {
             }
             resolved_count = count;
         }
+        for (i, cp_entry) in self.constant_pool.iter().enumerate() {
+            cp_entry.validate(self.major_version).map_err(|e| format!("{} constant pool entry {}", e, i))?;
+        }
 
         if !self.this_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in this_class");
         }
-        validate_ref_type(&self.this_class, ConstantPoolEntryTypes::CLASS_INFO, "this_class")?;
+        validate_cp_ref_type(&self.this_class, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
         if !self.super_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in super_class");
         }
-        validate_ref_type(&self.super_class, ConstantPoolEntryTypes::SUPERCLASS, "super_class")?;
+        validate_cp_ref_type(&self.super_class, ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
         for (i, interface) in self.interfaces.iter().enumerate() {
             if !interface.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
                 return Err(format!("Unable to resolve constant pool reference in interface {}", i));
             }
+            validate_cp_ref_type(interface, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?;
         }
         for (i, field) in self.fields.iter().enumerate() {
             field.resolve(resolved_count, &format!("field index {}", i), &self.constant_pool)?;
+            field.validate().map_err(|e| format!("{} class field {}", e, i))?;
         }
         for (i, method) in self.methods.iter().enumerate() {
             method.resolve(resolved_count, &format!("method index {}", i), &self.constant_pool)?;
+            method.validate().map_err(|e| format!("{} class method {}", e, i))?;
         }
         for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.resolve(resolved_count, &format!("attribute index {}", i), &self.constant_pool)?;
+            attribute.validate().map_err(|e| format!("{} class attribute {}", e, i))?;
         }
         Ok(())
     }

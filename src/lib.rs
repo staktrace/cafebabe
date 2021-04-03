@@ -93,6 +93,13 @@ impl<'a> ConstantPoolRef<'a> {
             ConstantPoolRef::Resolved(_) => true,
         }
     }
+
+    fn get(&self) -> Rc<ConstantPoolEntry<'a>> {
+        match self {
+            ConstantPoolRef::Unresolved(_) => panic!("Called get on a unresolved ConstantPoolRef"),
+            ConstantPoolRef::Resolved(target) => target.clone(),
+        }
+    }
 }
 
 fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
@@ -115,6 +122,29 @@ pub enum ReferenceKind {
     InvokeSpecial,
     NewInvokeSpecial,
     InvokeInterface,
+}
+
+bitflags! {
+    struct ConstantPoolEntryTypes: u16 {
+        const ZERO = 0x0001;
+        const UTF8 = 0x0002;
+        const INTEGER = 0x0004;
+        const FLOAT = 0x0008;
+        const LONG = 0x0010;
+        const DOUBLE = 0x0020;
+        const CLASS_INFO = 0x0040;
+        const STRING = 0x0080;
+        const FIELD_REF = 0x0100;
+        const METHOD_REF = 0x0200;
+        const INTERFACE_METHOD_REF = 0x0400;
+        const NAME_AND_TYPE = 0x0800;
+        const METHOD_HANDLE = 0x1000;
+        const METHOD_TYPE = 0x2000;
+        const INVOKE_DYNAMIC = 0x4000;
+        const UNUSED = 0x8000;
+
+        const SUPERCLASS = Self::ZERO.bits() | Self::CLASS_INFO.bits();
+    }
 }
 
 #[derive(Debug)]
@@ -166,6 +196,39 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::InvokeDynamic(_, x) => x.borrow().is_resolved(),
             _ => true,
         }
+    }
+
+    fn get_type(&self) -> ConstantPoolEntryTypes {
+        match self {
+            ConstantPoolEntry::Zero => ConstantPoolEntryTypes::ZERO,
+            ConstantPoolEntry::Utf8(_) => ConstantPoolEntryTypes::UTF8,
+            ConstantPoolEntry::Integer(_) => ConstantPoolEntryTypes::INTEGER,
+            ConstantPoolEntry::Float(_) => ConstantPoolEntryTypes::FLOAT,
+            ConstantPoolEntry::Long(_) => ConstantPoolEntryTypes::LONG,
+            ConstantPoolEntry::Double(_) => ConstantPoolEntryTypes::DOUBLE,
+            ConstantPoolEntry::ClassInfo(_) => ConstantPoolEntryTypes::CLASS_INFO,
+            ConstantPoolEntry::String(_) => ConstantPoolEntryTypes::STRING,
+            ConstantPoolEntry::FieldRef(_, _) => ConstantPoolEntryTypes::FIELD_REF,
+            ConstantPoolEntry::MethodRef(_, _) => ConstantPoolEntryTypes::METHOD_REF,
+            ConstantPoolEntry::InterfaceMethodRef(_, _) => ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
+            ConstantPoolEntry::NameAndType(_, _) => ConstantPoolEntryTypes::NAME_AND_TYPE,
+            ConstantPoolEntry::MethodHandle(_, _) => ConstantPoolEntryTypes::METHOD_HANDLE,
+            ConstantPoolEntry::MethodType(_) => ConstantPoolEntryTypes::METHOD_TYPE,
+            ConstantPoolEntry::InvokeDynamic(_, _) => ConstantPoolEntryTypes::INVOKE_DYNAMIC,
+            ConstantPoolEntry::Unused => ConstantPoolEntryTypes::UNUSED,
+        }
+    }
+}
+
+fn cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>) -> ConstantPoolEntryTypes {
+    cp_ref.borrow().get().get_type()
+}
+
+fn validate_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, valid: ConstantPoolEntryTypes, desc: &str) -> Result<(), String> {
+    if valid.contains(cp_ref_type(cp_ref)) {
+        Ok(())
+    } else {
+        Err(format!("Unexpected constant pool reference type for {}", desc))
     }
 }
 
@@ -514,9 +577,11 @@ impl<'a> ClassFile<'a> {
         if !self.this_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in this_class");
         }
+        validate_ref_type(&self.this_class, ConstantPoolEntryTypes::CLASS_INFO, "this_class")?;
         if !self.super_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in super_class");
         }
+        validate_ref_type(&self.super_class, ConstantPoolEntryTypes::SUPERCLASS, "super_class")?;
         for (i, interface) in self.interfaces.iter().enumerate() {
             if !interface.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
                 return Err(format!("Unable to resolve constant pool reference in interface {}", i));

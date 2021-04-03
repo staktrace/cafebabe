@@ -176,9 +176,9 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::MethodRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
             ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
             ConstantPoolEntry::NameAndType(x, y) => Ok(x.borrow_mut().resolve(my_index, pool)? && y.borrow_mut().resolve(my_index, pool)?),
-            ConstantPoolEntry::MethodHandle(_, x) => x.borrow_mut().resolve(my_index, pool),
+            ConstantPoolEntry::MethodHandle(_, y) => y.borrow_mut().resolve(my_index, pool),
             ConstantPoolEntry::MethodType(x) => x.borrow_mut().resolve(my_index, pool),
-            ConstantPoolEntry::InvokeDynamic(_, x) => x.borrow_mut().resolve(my_index, pool),
+            ConstantPoolEntry::InvokeDynamic(_, y) => y.borrow_mut().resolve(my_index, pool),
             _ => Ok(true),
         }
     }
@@ -191,9 +191,9 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::MethodRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
             ConstantPoolEntry::InterfaceMethodRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
             ConstantPoolEntry::NameAndType(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
-            ConstantPoolEntry::MethodHandle(_, x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::MethodHandle(_, y) => y.borrow().is_resolved(),
             ConstantPoolEntry::MethodType(x) => x.borrow().is_resolved(),
-            ConstantPoolEntry::InvokeDynamic(_, x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::InvokeDynamic(_, y) => y.borrow().is_resolved(),
             _ => true,
         }
     }

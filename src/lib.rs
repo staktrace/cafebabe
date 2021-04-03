@@ -622,34 +622,46 @@ impl<'a> ClassFile<'a> {
             }
             resolved_count = count;
         }
-        for (i, cp_entry) in self.constant_pool.iter().enumerate() {
-            cp_entry.validate(self.major_version).map_err(|e| format!("{} constant pool entry {}", e, i))?;
-        }
 
         if !self.this_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in this_class");
         }
-        validate_cp_ref_type(&self.this_class, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
         if !self.super_class.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
             return err("Unable to resolve constant pool reference in super_class");
         }
-        validate_cp_ref_type(&self.super_class, ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
         for (i, interface) in self.interfaces.iter().enumerate() {
             if !interface.borrow_mut().resolve(resolved_count, &self.constant_pool)? {
                 return Err(format!("Unable to resolve constant pool reference in interface {}", i));
             }
-            validate_cp_ref_type(interface, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?;
         }
         for (i, field) in self.fields.iter().enumerate() {
             field.resolve(resolved_count, &format!("field index {}", i), &self.constant_pool)?;
-            field.validate().map_err(|e| format!("{} class field {}", e, i))?;
         }
         for (i, method) in self.methods.iter().enumerate() {
             method.resolve(resolved_count, &format!("method index {}", i), &self.constant_pool)?;
-            method.validate().map_err(|e| format!("{} class method {}", e, i))?;
         }
         for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.resolve(resolved_count, &format!("attribute index {}", i), &self.constant_pool)?;
+        }
+        Ok(())
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        for (i, cp_entry) in self.constant_pool.iter().enumerate() {
+            cp_entry.validate(self.major_version).map_err(|e| format!("{} constant pool entry {}", e, i))?;
+        }
+        validate_cp_ref_type(&self.this_class, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
+        validate_cp_ref_type(&self.super_class, ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
+        for (i, interface) in self.interfaces.iter().enumerate() {
+            validate_cp_ref_type(interface, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?;
+        }
+        for (i, field) in self.fields.iter().enumerate() {
+            field.validate().map_err(|e| format!("{} class field {}", e, i))?;
+        }
+        for (i, method) in self.methods.iter().enumerate() {
+            method.validate().map_err(|e| format!("{} class method {}", e, i))?;
+        }
+        for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.validate().map_err(|e| format!("{} class attribute {}", e, i))?;
         }
         Ok(())
@@ -690,5 +702,6 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
         attributes,
     };
     class_file.resolve()?;
+    class_file.validate()?;
     Ok(class_file)
 }

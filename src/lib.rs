@@ -460,6 +460,12 @@ pub struct AttributeInfo<'a> {
     data: AttributeData<'a>,
 }
 
+impl<'a> AttributeInfo<'a> {
+    pub fn name(&self) -> Cow<'a, str> {
+        self.name.utf8()
+    }
+}
+
 fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for i in 0..attributes_count {
@@ -652,6 +658,13 @@ impl<'a> ClassFile<'a> {
             ConstantPoolEntry::ClassInfo(x) => Some(x.borrow().get().utf8()),
             _ => panic!("Attempting to get classinfo data from non-classinfo constant pool entry!"),
         }
+    }
+
+    pub fn interface_names(&self) -> Vec<Cow<'a, str>> {
+        self.interfaces
+            .iter()
+            .map(|interface| interface.classinfo_utf8())
+            .collect()
     }
 }
 

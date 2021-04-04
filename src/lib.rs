@@ -642,8 +642,16 @@ pub struct ClassFile<'a> {
 }
 
 impl<'a> ClassFile<'a> {
-    pub fn class_name(&self) -> Cow<'a, str> {
+    pub fn this_class_name(&self) -> Cow<'a, str> {
         self.this_class.classinfo_utf8()
+    }
+
+    pub fn super_class_name(&self) -> Option<Cow<'a, str>> {
+        match self.super_class.deref() {
+            ConstantPoolEntry::Zero => None,
+            ConstantPoolEntry::ClassInfo(x) => Some(x.borrow().get().utf8()),
+            _ => panic!("Attempting to get classinfo data from non-classinfo constant pool entry!"),
+        }
     }
 }
 

@@ -102,27 +102,18 @@ impl<'a> ConstantPoolRef<'a> {
     }
 }
 
-fn read_unresolved_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
-    Ok(RefCell::new(ConstantPoolRef::Unresolved(read_u2(bytes, ix)?)))
+trait RefCellDeref<'a> {
+    fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String>;
+    fn is_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String>;
 }
 
-fn resolve_cp_ref<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String> {
-    cp_ref.borrow_mut().resolve(cp_index, pool)
-}
-
-fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Rc<ConstantPoolEntry<'a>>, String> {
-    let cp_index = read_u2(bytes, ix)? as usize;
-    if cp_index >= pool.len() {
-        return Err(format!("Out-of-bounds index {} in constant pool reference", cp_index));
+impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
+    fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String> {
+        self.borrow_mut().resolve(cp_index, pool)
     }
-    Ok(pool[cp_index].clone())
-}
 
-fn validate_cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, valid: ConstantPoolEntryTypes) -> Result<bool, String> {
-    if valid.contains(cp_ref.borrow().get().get_type()) {
-        Ok(true)
-    } else {
-        err("Unexpected constant pool reference type for")
+    fn is_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String> {
+        self.borrow().get().is_type(allowed)
     }
 }
 
@@ -191,15 +182,15 @@ enum ConstantPoolEntry<'a> {
 impl<'a> ConstantPoolEntry<'a> {
     fn resolve(&self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => resolve_cp_ref(x, my_index, pool),
-            ConstantPoolEntry::String(x) => resolve_cp_ref(x, my_index, pool),
-            ConstantPoolEntry::FieldRef(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
-            ConstantPoolEntry::MethodRef(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(resolve_cp_ref(x, my_index, pool)? && resolve_cp_ref(y, my_index, pool)?),
-            ConstantPoolEntry::MethodHandle(_, y) => resolve_cp_ref(y, my_index, pool),
-            ConstantPoolEntry::MethodType(x) => resolve_cp_ref(x, my_index, pool),
-            ConstantPoolEntry::InvokeDynamic(_, y) => resolve_cp_ref(y, my_index, pool),
+            ConstantPoolEntry::ClassInfo(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::String(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::FieldRef(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
+            ConstantPoolEntry::MethodRef(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
+            ConstantPoolEntry::MethodHandle(_, y) => y.resolve(my_index, pool),
+            ConstantPoolEntry::MethodType(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
             _ => Ok(true),
         }
     }
@@ -242,13 +233,13 @@ impl<'a> ConstantPoolEntry<'a> {
 
     fn validate(&self, major_version: u16) -> Result<bool, String> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::String(x) => validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::FieldRef(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::CLASS_INFO)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::MethodRef(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::CLASS_INFO)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::CLASS_INFO)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8)? && validate_cp_ref_type(y, ConstantPoolEntryTypes::UTF8)?),
-            ConstantPoolEntry::MethodHandle(x, y) => validate_cp_ref_type(y, match x {
+            ConstantPoolEntry::ClassInfo(x) => x.is_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::String(x) => x.is_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::FieldRef(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::MethodRef(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::UTF8)? && y.is_type(ConstantPoolEntryTypes::UTF8)?),
+            ConstantPoolEntry::MethodHandle(x, y) => y.is_type(match x {
                 ReferenceKind::GetField |
                 ReferenceKind::GetStatic |
                 ReferenceKind::PutField |
@@ -259,8 +250,8 @@ impl<'a> ConstantPoolEntry<'a> {
                 ReferenceKind::InvokeSpecial => if major_version < 52 { ConstantPoolEntryTypes::METHOD_REF } else { ConstantPoolEntryTypes::NEW_METHOD_REFS },
                 ReferenceKind::InvokeInterface => ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
             }),
-            ConstantPoolEntry::MethodType(x) => validate_cp_ref_type(x, ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::InvokeDynamic(_, y) => validate_cp_ref_type(y, ConstantPoolEntryTypes::NAME_AND_TYPE),
+            ConstantPoolEntry::MethodType(x) => x.is_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::InvokeDynamic(_, y) => y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
             _ => Ok(true),
         }
     }
@@ -272,6 +263,10 @@ impl<'a> ConstantPoolEntry<'a> {
             err("Unexpected constant pool reference type for")
         }
     }
+}
+
+fn read_unresolved_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
+    Ok(RefCell::new(ConstantPoolRef::Unresolved(read_u2(bytes, ix)?)))
 }
 
 fn read_constant_utf8<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
@@ -411,6 +406,14 @@ fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Res
         resolved_count = count;
     }
     Ok(())
+}
+
+fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Rc<ConstantPoolEntry<'a>>, String> {
+    let cp_index = read_u2(bytes, ix)? as usize;
+    if cp_index >= pool.len() {
+        return Err(format!("Out-of-bounds index {} in constant pool reference", cp_index));
+    }
+    Ok(pool[cp_index].clone())
 }
 
 fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {

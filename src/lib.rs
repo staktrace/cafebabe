@@ -102,7 +102,7 @@ impl<'a> ConstantPoolRef<'a> {
     }
 }
 
-fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
+fn read_unresolved_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
     Ok(RefCell::new(ConstantPoolRef::Unresolved(read_u2(bytes, ix)?)))
 }
 
@@ -110,12 +110,16 @@ fn resolve_cp_ref<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, cp_index: usize, po
     cp_ref.borrow_mut().resolve(cp_index, pool)
 }
 
-fn cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>) -> ConstantPoolEntryTypes {
-    cp_ref.borrow().get().get_type()
+fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Rc<ConstantPoolEntry<'a>>, String> {
+    let cp_index = read_u2(bytes, ix)? as usize;
+    if cp_index >= pool.len() {
+        return Err(format!("Out-of-bounds index {} in constant pool reference", cp_index));
+    }
+    Ok(pool[cp_index].clone())
 }
 
 fn validate_cp_ref_type<'a>(cp_ref: &RefCell<ConstantPoolRef<'a>>, valid: ConstantPoolEntryTypes) -> Result<bool, String> {
-    if valid.contains(cp_ref_type(cp_ref)) {
+    if valid.contains(cp_ref.borrow().get().get_type()) {
         Ok(true)
     } else {
         err("Unexpected constant pool reference type for")
@@ -260,6 +264,14 @@ impl<'a> ConstantPoolEntry<'a> {
             _ => Ok(true),
         }
     }
+
+    fn is_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String> {
+        if allowed.contains(self.get_type()) {
+            Ok(true)
+        } else {
+            err("Unexpected constant pool reference type for")
+        }
+    }
 }
 
 fn read_constant_utf8<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
@@ -289,36 +301,36 @@ fn read_constant_double<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantP
 }
 
 fn read_constant_class<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let name_ref = read_cp_ref(bytes, ix)?;
+    let name_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::ClassInfo(name_ref))
 }
 
 fn read_constant_string<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let value_ref = read_cp_ref(bytes, ix)?;
+    let value_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::String(value_ref))
 }
 
 fn read_constant_fieldref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let class_ref = read_cp_ref(bytes, ix)?;
-    let name_and_type_ref = read_cp_ref(bytes, ix)?;
+    let class_ref = read_unresolved_cp_ref(bytes, ix)?;
+    let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::FieldRef(class_ref, name_and_type_ref))
 }
 
 fn read_constant_methodref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let class_ref = read_cp_ref(bytes, ix)?;
-    let name_and_type_ref = read_cp_ref(bytes, ix)?;
+    let class_ref = read_unresolved_cp_ref(bytes, ix)?;
+    let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::MethodRef(class_ref, name_and_type_ref))
 }
 
 fn read_constant_interfacemethodref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let class_ref = read_cp_ref(bytes, ix)?;
-    let name_and_type_ref = read_cp_ref(bytes, ix)?;
+    let class_ref = read_unresolved_cp_ref(bytes, ix)?;
+    let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::InterfaceMethodRef(class_ref, name_and_type_ref))
 }
 
 fn read_constant_nameandtype<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let name_ref = read_cp_ref(bytes, ix)?;
-    let descriptor_ref = read_cp_ref(bytes, ix)?;
+    let name_ref = read_unresolved_cp_ref(bytes, ix)?;
+    let descriptor_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::NameAndType(name_ref, descriptor_ref))
 }
 
@@ -335,18 +347,18 @@ fn read_constant_methodhandle<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Con
         9 => ReferenceKind::InvokeInterface,
         n => return Err(format!("Unexpected reference kind {} when reading CONSTANT_methodhandle at index {}", n, *ix - 1)),
     };
-    let reference_ref = read_cp_ref(bytes, ix)?;
+    let reference_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::MethodHandle(reference_kind, reference_ref))
 }
 
 fn read_constant_methodtype<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let descriptor_ref = read_cp_ref(bytes, ix)?;
+    let descriptor_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::MethodType(descriptor_ref))
 }
 
 fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
     let bootstrap_method_ref = BootstrapMethodRef::Unresolved(read_u2(bytes, ix)?);
-    let name_and_type_ref = read_cp_ref(bytes, ix)?;
+    let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::InvokeDynamic(bootstrap_method_ref, name_and_type_ref))
 }
 
@@ -401,38 +413,31 @@ fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Res
     Ok(())
 }
 
-fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16) -> Result<Vec<RefCell<ConstantPoolRef<'a>>>, String> {
+fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
     let mut interfaces = Vec::new();
     for _i in 0..interfaces_count {
-        interfaces.push(read_cp_ref(bytes, ix)?);
+        interfaces.push(read_cp_ref(bytes, ix, pool)?);
     }
     Ok(interfaces)
 }
 
 #[derive(Debug)]
 pub struct AttributeInfo<'a> {
-    name: RefCell<ConstantPoolRef<'a>>,
+    name: Rc<ConstantPoolEntry<'a>>,
     info: &'a [u8],
 }
 
 impl<'a> AttributeInfo<'a> {
-    fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
-        if !resolve_cp_ref(&self.name, resolved_count, pool)? {
-            return Err(format!("Unable to resolve name field for {}", desc));
-        }
-        Ok(())
-    }
-
     fn validate(&self) -> Result<(), String> {
-        validate_cp_ref_type(&self.name, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        self.name.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
         Ok(())
     }
 }
 
-fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16) -> Result<Vec<AttributeInfo<'a>>, String> {
+fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for _i in 0..attributes_count {
-        let name = read_cp_ref(bytes, ix)?;
+        let name = read_cp_ref(bytes, ix, pool)?;
         let length = read_u4(bytes, ix)? as usize;
         if bytes.len() < *ix + length {
             return Err(format!("Unexpected end of stream reading attributes at index {}", *ix));
@@ -487,28 +492,15 @@ bitflags! {
 #[derive(Debug)]
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
-    name: RefCell<ConstantPoolRef<'a>>,
-    descriptor: RefCell<ConstantPoolRef<'a>>,
+    name: Rc<ConstantPoolEntry<'a>>,
+    descriptor: Rc<ConstantPoolEntry<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
 impl<'a> FieldInfo<'a> {
-    fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
-        if !resolve_cp_ref(&self.name, resolved_count, pool)? {
-            return Err(format!("Unable to resolve name field for {}", desc));
-        }
-        if !resolve_cp_ref(&self.descriptor, resolved_count, pool)? {
-            return Err(format!("Unable to resolve descriptor field for {}", desc));
-        }
-        for (i, attribute) in self.attributes.iter().enumerate() {
-            attribute.resolve(resolved_count, &format!("attribute index {} of {}", i, desc), pool)?;
-        }
-        Ok(())
-    }
-
     fn validate(&self) -> Result<(), String> {
-        validate_cp_ref_type(&self.name, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
-        validate_cp_ref_type(&self.descriptor, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
+        self.name.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        self.descriptor.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
         for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.validate().map_err(|e| format!("{} attribute {} of", e, i))?;
         }
@@ -516,14 +508,14 @@ impl<'a> FieldInfo<'a> {
     }
 }
 
-fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, fields_count: u16) -> Result<Vec<FieldInfo<'a>>, String> {
+fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, fields_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, String> {
     let mut fields = Vec::new();
     for _i in 0..fields_count {
         let access_flags = FieldAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on field")?;
-        let name = read_cp_ref(bytes, ix)?;
-        let descriptor = read_cp_ref(bytes, ix)?;
+        let name = read_cp_ref(bytes, ix, pool)?;
+        let descriptor = read_cp_ref(bytes, ix, pool)?;
         let attributes_count = read_u2(bytes, ix)?;
-        let attributes = read_attributes(bytes, ix, attributes_count)?;
+        let attributes = read_attributes(bytes, ix, attributes_count, pool)?;
         fields.push(FieldInfo {
             access_flags,
             name,
@@ -554,28 +546,15 @@ bitflags! {
 #[derive(Debug)]
 pub struct MethodInfo<'a> {
     pub access_flags: MethodAccessFlags,
-    name: RefCell<ConstantPoolRef<'a>>,
-    descriptor: RefCell<ConstantPoolRef<'a>>,
+    name: Rc<ConstantPoolEntry<'a>>,
+    descriptor: Rc<ConstantPoolEntry<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
 impl<'a> MethodInfo<'a> {
-    fn resolve(&self, resolved_count: usize, desc: &str, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
-        if !resolve_cp_ref(&self.name, resolved_count, pool)? {
-            return Err(format!("Unable to resolve name field for {}", desc));
-        }
-        if !resolve_cp_ref(&self.descriptor, resolved_count, pool)? {
-            return Err(format!("Unable to resolve descriptor field for {}", desc));
-        }
-        for (i, attribute) in self.attributes.iter().enumerate() {
-            attribute.resolve(resolved_count, &format!("attribute index {} of {}", i, desc), pool)?;
-        }
-        Ok(())
-    }
-
     fn validate(&self) -> Result<(), String> {
-        validate_cp_ref_type(&self.name, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
-        validate_cp_ref_type(&self.descriptor, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
+        self.name.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        self.descriptor.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
         for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.validate().map_err(|e| format!("{} attribute {} of", e, i))?;
         }
@@ -583,14 +562,14 @@ impl<'a> MethodInfo<'a> {
     }
 }
 
-fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, methods_count: u16) -> Result<Vec<MethodInfo<'a>>, String> {
+fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, methods_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodInfo<'a>>, String> {
     let mut methods = Vec::new();
     for _i in 0..methods_count {
         let access_flags = MethodAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on method")?;
-        let name = read_cp_ref(bytes, ix)?;
-        let descriptor = read_cp_ref(bytes, ix)?;
+        let name = read_cp_ref(bytes, ix, pool)?;
+        let descriptor = read_cp_ref(bytes, ix, pool)?;
         let attributes_count = read_u2(bytes, ix)?;
-        let attributes = read_attributes(bytes, ix, attributes_count)?;
+        let attributes = read_attributes(bytes, ix, attributes_count, pool)?;
         methods.push(MethodInfo {
             access_flags,
             name,
@@ -620,49 +599,23 @@ pub struct ClassFile<'a> {
     pub minor_version: u16,
     constant_pool: Vec<Rc<ConstantPoolEntry<'a>>>,
     pub access_flags: ClassAccessFlags,
-    this_class: RefCell<ConstantPoolRef<'a>>,
-    super_class: RefCell<ConstantPoolRef<'a>>,
-    interfaces: Vec<RefCell<ConstantPoolRef<'a>>>,
+    this_class: Rc<ConstantPoolEntry<'a>>,
+    super_class: Rc<ConstantPoolEntry<'a>>,
+    interfaces: Vec<Rc<ConstantPoolEntry<'a>>>,
     pub fields: Vec<FieldInfo<'a>>,
     pub methods: Vec<MethodInfo<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
 impl<'a> ClassFile<'a> {
-    fn resolve(&self) -> Result<(), String> {
-        let resolved_count = self.constant_pool.len();
-
-        if !resolve_cp_ref(&self.this_class, resolved_count, &self.constant_pool)? {
-            return err("Unable to resolve constant pool reference in this_class");
-        }
-        if !resolve_cp_ref(&self.super_class, resolved_count, &self.constant_pool)? {
-            return err("Unable to resolve constant pool reference in super_class");
-        }
-        for (i, interface) in self.interfaces.iter().enumerate() {
-            if !resolve_cp_ref(interface, resolved_count, &self.constant_pool)? {
-                return Err(format!("Unable to resolve constant pool reference in interface {}", i));
-            }
-        }
-        for (i, field) in self.fields.iter().enumerate() {
-            field.resolve(resolved_count, &format!("field index {}", i), &self.constant_pool)?;
-        }
-        for (i, method) in self.methods.iter().enumerate() {
-            method.resolve(resolved_count, &format!("method index {}", i), &self.constant_pool)?;
-        }
-        for (i, attribute) in self.attributes.iter().enumerate() {
-            attribute.resolve(resolved_count, &format!("attribute index {}", i), &self.constant_pool)?;
-        }
-        Ok(())
-    }
-
     fn validate(&self) -> Result<(), String> {
         for (i, cp_entry) in self.constant_pool.iter().enumerate() {
             cp_entry.validate(self.major_version).map_err(|e| format!("{} constant pool entry {}", e, i))?;
         }
-        validate_cp_ref_type(&self.this_class, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
-        validate_cp_ref_type(&self.super_class, ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
+        self.this_class.is_type(ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
+        self.super_class.is_type(ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
         for (i, interface) in self.interfaces.iter().enumerate() {
-            validate_cp_ref_type(interface, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?;
+            interface.is_type(ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?;
         }
         for (i, field) in self.fields.iter().enumerate() {
             field.validate().map_err(|e| format!("{} class field {}", e, i))?;
@@ -689,16 +642,16 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     resolve_constant_pool(&constant_pool)?;
 
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
-    let this_class = read_cp_ref(raw_bytes, &mut ix)?;
-    let super_class = read_cp_ref(raw_bytes, &mut ix)?;
+    let this_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool)?;
+    let super_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool)?;
     let interfaces_count = read_u2(raw_bytes, &mut ix)?;
-    let interfaces = read_interfaces(raw_bytes, &mut ix, interfaces_count)?;
+    let interfaces = read_interfaces(raw_bytes, &mut ix, interfaces_count, &constant_pool)?;
     let fields_count = read_u2(raw_bytes, &mut ix)?;
-    let fields = read_fields(raw_bytes, &mut ix, fields_count)?;
+    let fields = read_fields(raw_bytes, &mut ix, fields_count, &constant_pool)?;
     let methods_count = read_u2(raw_bytes, &mut ix)?;
-    let methods = read_methods(raw_bytes, &mut ix, methods_count)?;
+    let methods = read_methods(raw_bytes, &mut ix, methods_count, &constant_pool)?;
     let attributes_count = read_u2(raw_bytes, &mut ix)?;
-    let attributes = read_attributes(raw_bytes, &mut ix, attributes_count)?;
+    let attributes = read_attributes(raw_bytes, &mut ix, attributes_count, &constant_pool)?;
 
     let class_file = ClassFile {
         major_version,
@@ -712,7 +665,6 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
         methods,
         attributes,
     };
-    class_file.resolve()?;
     class_file.validate()?;
     Ok(class_file)
 }

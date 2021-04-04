@@ -104,7 +104,7 @@ impl<'a> ConstantPoolRef<'a> {
 
 trait RefCellDeref<'a> {
     fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, String>;
-    fn is_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String>;
+    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String>;
 }
 
 impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
@@ -112,8 +112,8 @@ impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
         self.borrow_mut().resolve(cp_index, pool)
     }
 
-    fn is_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String> {
-        self.borrow().get().is_type(allowed)
+    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String> {
+        self.borrow().get().ensure_type(allowed)
     }
 }
 
@@ -233,13 +233,13 @@ impl<'a> ConstantPoolEntry<'a> {
 
     fn validate(&self, major_version: u16) -> Result<bool, String> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => x.is_type(ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::String(x) => x.is_type(ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::FieldRef(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::MethodRef(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(x.is_type(ConstantPoolEntryTypes::UTF8)? && y.is_type(ConstantPoolEntryTypes::UTF8)?),
-            ConstantPoolEntry::MethodHandle(x, y) => y.is_type(match x {
+            ConstantPoolEntry::ClassInfo(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::String(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::FieldRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::MethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && y.ensure_type(ConstantPoolEntryTypes::UTF8)?),
+            ConstantPoolEntry::MethodHandle(x, y) => y.ensure_type(match x {
                 ReferenceKind::GetField |
                 ReferenceKind::GetStatic |
                 ReferenceKind::PutField |
@@ -250,13 +250,13 @@ impl<'a> ConstantPoolEntry<'a> {
                 ReferenceKind::InvokeSpecial => if major_version < 52 { ConstantPoolEntryTypes::METHOD_REF } else { ConstantPoolEntryTypes::NEW_METHOD_REFS },
                 ReferenceKind::InvokeInterface => ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
             }),
-            ConstantPoolEntry::MethodType(x) => x.is_type(ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::InvokeDynamic(_, y) => y.is_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
+            ConstantPoolEntry::MethodType(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::InvokeDynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
             _ => Ok(true),
         }
     }
 
-    fn is_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String> {
+    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, String> {
         if allowed.contains(self.get_type()) {
             Ok(true)
         } else {
@@ -432,7 +432,7 @@ pub struct AttributeInfo<'a> {
 
 impl<'a> AttributeInfo<'a> {
     fn validate(&self) -> Result<(), String> {
-        self.name.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        self.name.ensure_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
         Ok(())
     }
 }
@@ -502,8 +502,8 @@ pub struct FieldInfo<'a> {
 
 impl<'a> FieldInfo<'a> {
     fn validate(&self) -> Result<(), String> {
-        self.name.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
-        self.descriptor.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
+        self.name.ensure_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        self.descriptor.ensure_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
         for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.validate().map_err(|e| format!("{} attribute {} of", e, i))?;
         }
@@ -556,8 +556,8 @@ pub struct MethodInfo<'a> {
 
 impl<'a> MethodInfo<'a> {
     fn validate(&self) -> Result<(), String> {
-        self.name.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
-        self.descriptor.is_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
+        self.name.ensure_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of", e))?;
+        self.descriptor.ensure_type(ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor field of", e))?;
         for (i, attribute) in self.attributes.iter().enumerate() {
             attribute.validate().map_err(|e| format!("{} attribute {} of", e, i))?;
         }
@@ -615,10 +615,10 @@ impl<'a> ClassFile<'a> {
         for (i, cp_entry) in self.constant_pool.iter().enumerate() {
             cp_entry.validate(self.major_version).map_err(|e| format!("{} constant pool entry {}", e, i))?;
         }
-        self.this_class.is_type(ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
-        self.super_class.is_type(ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
+        self.this_class.ensure_type(ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
+        self.super_class.ensure_type(ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
         for (i, interface) in self.interfaces.iter().enumerate() {
-            interface.is_type(ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?;
+            interface.ensure_type(ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?;
         }
         for (i, field) in self.fields.iter().enumerate() {
             field.validate().map_err(|e| format!("{} class field {}", e, i))?;

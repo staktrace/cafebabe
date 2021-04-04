@@ -266,10 +266,17 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
-    fn utf8(&self) -> &Cow<'a, str> {
+    fn utf8(&self) -> Cow<'a, str> {
         match self {
-            ConstantPoolEntry::Utf8(x) => x,
+            ConstantPoolEntry::Utf8(x) => x.clone(),
             _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        }
+    }
+
+    fn classinfo_utf8(&self) -> Cow<'a, str> {
+        match self {
+            ConstantPoolEntry::ClassInfo(x) => x.borrow().get().utf8(),
+            _ => panic!("Attempting to get classinfo data from non-classinfo constant pool entry!"),
         }
     }
 }
@@ -526,6 +533,16 @@ pub struct FieldInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
+impl<'a> FieldInfo<'a> {
+    pub fn name(&self) -> Cow<'a, str> {
+        self.name.utf8()
+    }
+
+    pub fn descriptor(&self) -> Cow<'a, str> {
+        self.descriptor.utf8()
+    }
+}
+
 fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, fields_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, String> {
     let mut fields = Vec::new();
     for i in 0..fields_count {
@@ -567,6 +584,16 @@ pub struct MethodInfo<'a> {
     name: Rc<ConstantPoolEntry<'a>>,
     descriptor: Rc<ConstantPoolEntry<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
+}
+
+impl<'a> MethodInfo<'a> {
+    pub fn name(&self) -> Cow<'a, str> {
+        self.name.utf8()
+    }
+
+    pub fn descriptor(&self) -> Cow<'a, str> {
+        self.descriptor.utf8()
+    }
 }
 
 fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, methods_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodInfo<'a>>, String> {
@@ -612,6 +639,12 @@ pub struct ClassFile<'a> {
     pub fields: Vec<FieldInfo<'a>>,
     pub methods: Vec<MethodInfo<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
+}
+
+impl<'a> ClassFile<'a> {
+    pub fn class_name(&self) -> Cow<'a, str> {
+        self.this_class.classinfo_utf8()
+    }
 }
 
 pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {

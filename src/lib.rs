@@ -95,10 +95,10 @@ impl<'a> ConstantPoolRef<'a> {
         }
     }
 
-    fn get(&self) -> Rc<ConstantPoolEntry<'a>> {
+    fn get(&self) -> &Rc<ConstantPoolEntry<'a>> {
         match self {
             ConstantPoolRef::Unresolved(_) => panic!("Called get on a unresolved ConstantPoolRef"),
-            ConstantPoolRef::Resolved(target) => target.clone(),
+            ConstantPoolRef::Resolved(target) => target,
         }
     }
 }

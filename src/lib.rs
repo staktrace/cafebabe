@@ -4,6 +4,7 @@ extern crate cesu8;
 
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
 
 fn err<T>(msg: &'static str) -> Result<T, String> {
@@ -156,6 +157,7 @@ bitflags! {
 
         const SUPERCLASS = Self::ZERO.bits() | Self::CLASS_INFO.bits();
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
+        const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();
     }
 }
 
@@ -261,6 +263,13 @@ impl<'a> ConstantPoolEntry<'a> {
             Ok(true)
         } else {
             err("Unexpected constant pool reference type for")
+        }
+    }
+
+    fn utf8(&self) -> &Cow<'a, str> {
+        match self {
+            ConstantPoolEntry::Utf8(x) => x,
+            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
         }
     }
 }
@@ -433,7 +442,8 @@ fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16, p
 }
 
 #[derive(Debug)]
-pub enum AttributeData<'a> {
+enum AttributeData<'a> {
+    ConstantValue(Rc<ConstantPoolEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -451,8 +461,18 @@ fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, p
         if bytes.len() < *ix + length {
             return Err(format!("Unexpected end of stream reading attributes at index {}", *ix));
         }
-        let data = AttributeData::Other(&bytes[*ix .. *ix + length]);
-        *ix += length;
+        let data = match name.utf8().deref() {
+            "ConstantValue" => {
+                if length != 2 {
+                    return Err(format!("Unexpected length {} for ConstantValue attribute {}", length, i));
+                }
+                AttributeData::ConstantValue(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CONSTANTS).map_err(|e| format!("{} value field of attribute {}", e, i))?)
+            }
+            _ => {
+                *ix += length;
+                AttributeData::Other(&bytes[*ix - length .. *ix])
+            }
+        };
         attributes.push(AttributeInfo {
             name,
             data,

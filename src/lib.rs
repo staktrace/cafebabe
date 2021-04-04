@@ -425,9 +425,14 @@ fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16, p
 }
 
 #[derive(Debug)]
+pub enum AttributeData<'a> {
+    Other(&'a [u8]),
+}
+
+#[derive(Debug)]
 pub struct AttributeInfo<'a> {
     name: Rc<ConstantPoolEntry<'a>>,
-    info: &'a [u8],
+    data: AttributeData<'a>,
 }
 
 impl<'a> AttributeInfo<'a> {
@@ -445,11 +450,11 @@ fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, p
         if bytes.len() < *ix + length {
             return Err(format!("Unexpected end of stream reading attributes at index {}", *ix));
         }
-        let info = &bytes[*ix .. *ix + length];
+        let data = AttributeData::Other(&bytes[*ix .. *ix + length]);
         *ix += length;
         attributes.push(AttributeInfo {
             name,
-            info,
+            data,
         });
     }
     Ok(attributes)

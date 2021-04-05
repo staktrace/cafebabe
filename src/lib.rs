@@ -155,7 +155,7 @@ bitflags! {
         const INVOKE_DYNAMIC = 0x4000;
         const UNUSED = 0x8000;
 
-        const SUPERCLASS = Self::ZERO.bits() | Self::CLASS_INFO.bits();
+        const CLASS_OR_ZERO = Self::ZERO.bits() | Self::CLASS_INFO.bits();
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
         const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();
     }
@@ -655,8 +655,7 @@ impl<'a> ClassFile<'a> {
     pub fn super_class_name(&self) -> Option<Cow<'a, str>> {
         match self.super_class.deref() {
             ConstantPoolEntry::Zero => None,
-            ConstantPoolEntry::ClassInfo(x) => Some(x.borrow().get().utf8()),
-            _ => panic!("Attempting to get classinfo data from non-classinfo constant pool entry!"),
+            _ => Some(self.super_class.classinfo_utf8()),
         }
     }
 
@@ -682,7 +681,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
 
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
     let this_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
-    let super_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool, ConstantPoolEntryTypes::SUPERCLASS).map_err(|e| format!("{} super_class", e))?;
+    let super_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} super_class", e))?;
     let interfaces_count = read_u2(raw_bytes, &mut ix)?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, interfaces_count, &constant_pool)?;
     let fields_count = read_u2(raw_bytes, &mut ix)?;

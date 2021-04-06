@@ -38,7 +38,7 @@ bitflags! {
 }
 
 #[derive(Debug)]
-pub struct InnerClassData<'a> {
+pub struct InnerClassEntry<'a> {
     inner_class_info: Rc<ConstantPoolEntry<'a>>,
     outer_class_info: Rc<ConstantPoolEntry<'a>>,
     inner_name: Rc<ConstantPoolEntry<'a>>,
@@ -51,7 +51,7 @@ enum AttributeData<'a> {
     Code(CodeData<'a>),
     // TODO: StackMapTable - this looks complicated and I don't need it right now so skipping for now
     Exceptions(Vec<Rc<ConstantPoolEntry<'a>>>),
-    InnerClasses(Vec<InnerClassData<'a>>),
+    InnerClasses(Vec<InnerClassEntry<'a>>),
     EnclosingMethod(Rc<ConstantPoolEntry<'a>>, Rc<ConstantPoolEntry<'a>>),
     Synthetic,
     Signature(Rc<ConstantPoolEntry<'a>>),
@@ -122,7 +122,7 @@ fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Constant
     Ok(exceptions)
 }
 
-fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<InnerClassData<'a>>, String> {
+fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<InnerClassEntry<'a>>, String> {
     let mut innerclasses = Vec::new();
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
@@ -130,7 +130,7 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
         let outer_class_info = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
         let inner_name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8_OR_ZERO).map_err(|e| format!("{} inner name for inner class {}", e, i))?;
         let inner_class_access_flags = InnerClassAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on inner class {}", i))?;
-        innerclasses.push(InnerClassData {
+        innerclasses.push(InnerClassEntry {
             inner_class_info,
             outer_class_info,
             inner_name,

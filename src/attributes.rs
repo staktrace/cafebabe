@@ -61,6 +61,15 @@ pub struct LocalVariableEntry<'a> {
 }
 
 #[derive(Debug)]
+pub struct LocalVariableTypeEntry<'a> {
+    pub start_pc: u16,
+    pub length: u16,
+    name: Rc<ConstantPoolEntry<'a>>,
+    signature: Rc<ConstantPoolEntry<'a>>,
+    pub index: u16,
+}
+
+#[derive(Debug)]
 enum AttributeData<'a> {
     ConstantValue(Rc<ConstantPoolEntry<'a>>),
     Code(CodeData<'a>),
@@ -74,6 +83,8 @@ enum AttributeData<'a> {
     SourceDebugExtension(Cow<'a, str>),
     LineNumberTable(Vec<LineNumberEntry>),
     LocalVariableTable(Vec<LocalVariableEntry<'a>>),
+    LocalVariableTypeTable(Vec<LocalVariableTypeEntry<'a>>),
+    Deprecated,
     Other(&'a [u8]),
 }
 
@@ -192,6 +203,26 @@ fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     Ok(localvariables)
 }
 
+fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableTypeEntry<'a>>, String> {
+    let mut localvariabletypes = Vec::new();
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
+        let start_pc = read_u2(bytes, ix)?;
+        let length = read_u2(bytes, ix)?;
+        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name for variable {}", e, i))?;
+        let signature = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature for variable {}", e, i))?;
+        let index = read_u2(bytes, ix)?;
+        localvariabletypes.push(LocalVariableTypeEntry {
+            start_pc,
+            length,
+            name,
+            signature,
+            index,
+        });
+    }
+    Ok(localvariabletypes)
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for i in 0..attributes_count {
@@ -249,6 +280,14 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
             "LocalVariableTable" => {
                 let localvariable_data = read_localvariable_data(bytes, ix, pool).map_err(|e| format!("{} of LocalVariableTable attribute {}", e, i))?;
                 AttributeData::LocalVariableTable(localvariable_data)
+            }
+            "LocalVariableTypeTable" => {
+                let localvariabletype_data = read_localvariabletype_data(bytes, ix, pool).map_err(|e| format!("{} of LocalVariableTypeTable attribute {}", e, i))?;
+                AttributeData::LocalVariableTypeTable(localvariabletype_data)
+            }
+            "Deprecated" => {
+                ensure_length(length, 0).map_err(|e| format!("{} Deprecated attribute {}", e, i))?;
+                AttributeData::Deprecated
             }
             _ => {
                 *ix += length;

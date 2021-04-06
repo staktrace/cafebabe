@@ -46,6 +46,21 @@ pub struct InnerClassEntry<'a> {
 }
 
 #[derive(Debug)]
+pub struct LineNumberEntry {
+    pub start_pc: u16,
+    pub line_number: u16,
+}
+
+#[derive(Debug)]
+pub struct LocalVariableEntry<'a> {
+    pub start_pc: u16,
+    pub length: u16,
+    name: Rc<ConstantPoolEntry<'a>>,
+    descriptor: Rc<ConstantPoolEntry<'a>>,
+    pub index: u16,
+}
+
+#[derive(Debug)]
 enum AttributeData<'a> {
     ConstantValue(Rc<ConstantPoolEntry<'a>>),
     Code(CodeData<'a>),
@@ -56,6 +71,9 @@ enum AttributeData<'a> {
     Synthetic,
     Signature(Rc<ConstantPoolEntry<'a>>),
     SourceFile(Rc<ConstantPoolEntry<'a>>),
+    SourceDebugExtension(Cow<'a, str>),
+    LineNumberTable(Vec<LineNumberEntry>),
+    LocalVariableTable(Vec<LocalVariableEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -140,6 +158,40 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
     Ok(innerclasses)
 }
 
+fn read_linenumber_data<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Vec<LineNumberEntry>, String> {
+    let mut linenumbers = Vec::new();
+    let count = read_u2(bytes, ix)?;
+    for _i in 0..count {
+        let start_pc = read_u2(bytes, ix)?;
+        let line_number = read_u2(bytes, ix)?;
+        linenumbers.push(LineNumberEntry {
+            start_pc,
+            line_number,
+        });
+    }
+    Ok(linenumbers)
+}
+
+fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableEntry<'a>>, String> {
+    let mut localvariables = Vec::new();
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
+        let start_pc = read_u2(bytes, ix)?;
+        let length = read_u2(bytes, ix)?;
+        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name for variable {}", e, i))?;
+        let descriptor = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor for variable {}", e, i))?;
+        let index = read_u2(bytes, ix)?;
+        localvariables.push(LocalVariableEntry {
+            start_pc,
+            length,
+            name,
+            descriptor,
+            index,
+        });
+    }
+    Ok(localvariables)
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for i in 0..attributes_count {
@@ -183,6 +235,20 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
             "SourceFile" => {
                 ensure_length(length, 2).map_err(|e| format!("{} SourceFile attribute {}", e, i))?;
                 AttributeData::SourceFile(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature field of SourceFile attribute {}", e, i))?)
+            }
+            "SourceDebugExtension" => {
+                let modified_utf8_data = &bytes[*ix .. *ix + length];
+                *ix += length;
+                let debug_str = cesu8::from_java_cesu8(modified_utf8_data).map_err(|e| format!("{} modified utf8 data of SourceDebugExtension attribute {}", e, i))?;
+                AttributeData::SourceDebugExtension(debug_str)
+            }
+            "LineNumberTable" => {
+                let linenumber_data = read_linenumber_data(bytes, ix).map_err(|e| format!("{} of LineNumberTable attribute {}", e, i))?;
+                AttributeData::LineNumberTable(linenumber_data)
+            }
+            "LocalVariableTable" => {
+                let localvariable_data = read_localvariable_data(bytes, ix, pool).map_err(|e| format!("{} of LocalVariableTable attribute {}", e, i))?;
+                AttributeData::LocalVariableTable(localvariable_data)
             }
             _ => {
                 *ix += length;

@@ -143,18 +143,18 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
                 if length != 2 {
                     return Err(format!("Unexpected length {} for ConstantValue attribute {}", length, i));
                 }
-                AttributeData::ConstantValue(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CONSTANTS).map_err(|e| format!("{} value field of attribute {}", e, i))?)
+                AttributeData::ConstantValue(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CONSTANTS).map_err(|e| format!("{} value field of ConstantValue attribute {}", e, i))?)
             }
             "Code" => {
-                let code_data = read_code_data(bytes, ix, pool).map_err(|e| format!("{} of code attribute {}", e, i))?;
+                let code_data = read_code_data(bytes, ix, pool).map_err(|e| format!("{} of Code attribute {}", e, i))?;
                 AttributeData::Code(code_data)
             }
             "Exceptions" => {
-                let exceptions_data = read_exceptions_data(bytes, ix, pool).map_err(|e| format!("{} of exceptions attribute {}", e, i))?;
+                let exceptions_data = read_exceptions_data(bytes, ix, pool).map_err(|e| format!("{} of Exceptions attribute {}", e, i))?;
                 AttributeData::Exceptions(exceptions_data)
             }
             "InnerClasses" => {
-                let innerclasses_data = read_innerclasses_data(bytes, ix, pool).map_err(|e| format!("{} of innerclasses attribute {}", e, i))?;
+                let innerclasses_data = read_innerclasses_data(bytes, ix, pool).map_err(|e| format!("{} of InnerClasses attribute {}", e, i))?;
                 AttributeData::InnerClasses(innerclasses_data)
             }
             _ => {

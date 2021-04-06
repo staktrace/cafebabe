@@ -26,6 +26,8 @@ pub struct CodeData<'a> {
 enum AttributeData<'a> {
     ConstantValue(Rc<ConstantPoolEntry<'a>>),
     Code(CodeData<'a>),
+    // TODO: StackMapTable - this looks complicated and I don't need it right now so skipping for now
+    Exceptions(Vec<Rc<ConstantPoolEntry<'a>>>),
     Other(&'a [u8]),
 }
 
@@ -75,6 +77,16 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
     })
 }
 
+fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
+    let mut exceptions = Vec::new();
+    let exceptions_count = read_u2(bytes, ix)?;
+    for i in 0..exceptions_count {
+        let exception = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} exception {}", e, i))?;
+        exceptions.push(exception);
+    }
+    Ok(exceptions)
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for i in 0..attributes_count {
@@ -94,6 +106,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
             "Code" => {
                 let code_data = read_code_data(bytes, ix, pool).map_err(|e| format!("{} of code attribute {}", e, i))?;
                 AttributeData::Code(code_data)
+            }
+            "Exceptions" => {
+                let exceptions_data = read_exceptions_data(bytes, ix, pool).map_err(|e| format!("{} of exceptions attribute {}", e, i))?;
+                AttributeData::Exceptions(exceptions_data)
             }
             _ => {
                 *ix += length;

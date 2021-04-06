@@ -97,6 +97,7 @@ bitflags! {
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
         const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();
         const UTF8_OR_ZERO = Self::ZERO.bits() | Self::UTF8.bits();
+        const NAME_AND_TYPE_OR_ZERO = Self::ZERO.bits() | Self::NAME_AND_TYPE.bits();
     }
 }
 

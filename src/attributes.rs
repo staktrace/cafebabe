@@ -52,6 +52,7 @@ enum AttributeData<'a> {
     // TODO: StackMapTable - this looks complicated and I don't need it right now so skipping for now
     Exceptions(Vec<Rc<ConstantPoolEntry<'a>>>),
     InnerClasses(Vec<InnerClassData<'a>>),
+    EnclosingMethod(Rc<ConstantPoolEntry<'a>>, Rc<ConstantPoolEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -156,6 +157,14 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
             "InnerClasses" => {
                 let innerclasses_data = read_innerclasses_data(bytes, ix, pool).map_err(|e| format!("{} of InnerClasses attribute {}", e, i))?;
                 AttributeData::InnerClasses(innerclasses_data)
+            }
+            "EnclosingMethod" => {
+                if length != 4 {
+                    return Err(format!("Unexpected length {} for EnclosingMethod attribute {}", length, i));
+                }
+                let class = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
+                let method = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::NAME_AND_TYPE_OR_ZERO).map_err(|e| format!("{} method info of EnclosingMethod attribute {}", e, i))?;
+                AttributeData::EnclosingMethod(class, method)
             }
             _ => {
                 *ix += length;

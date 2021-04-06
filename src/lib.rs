@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use crate::attributes::{CodeData, read_code_data};
+use crate::attributes::{AttributeInfo, read_attributes};
 
 fn err<T>(msg: &'static str) -> Result<T, String> {
     Err(msg.to_string())
@@ -450,61 +450,6 @@ fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16, p
         interfaces.push(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?);
     }
     Ok(interfaces)
-}
-
-#[derive(Debug)]
-enum AttributeData<'a> {
-    ConstantValue(Rc<ConstantPoolEntry<'a>>),
-    Code(CodeData<'a>),
-    Other(&'a [u8]),
-}
-
-#[derive(Debug)]
-pub struct AttributeInfo<'a> {
-    name: Rc<ConstantPoolEntry<'a>>,
-    data: AttributeData<'a>,
-}
-
-impl<'a> AttributeInfo<'a> {
-    pub fn name(&self) -> Cow<'a, str> {
-        self.name.utf8()
-    }
-}
-
-pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
-    let mut attributes = Vec::new();
-    for i in 0..attributes_count {
-        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of attribute {}", e, i))?;
-        let length = read_u4(bytes, ix)? as usize;
-        let expected_end_ix = *ix + length;
-        if bytes.len() < expected_end_ix {
-            return Err(format!("Unexpected end of stream reading attributes at index {}", *ix));
-        }
-        let data = match name.utf8().deref() {
-            "ConstantValue" => {
-                if length != 2 {
-                    return Err(format!("Unexpected length {} for ConstantValue attribute {}", length, i));
-                }
-                AttributeData::ConstantValue(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CONSTANTS).map_err(|e| format!("{} value field of attribute {}", e, i))?)
-            }
-            "Code" => {
-                let code_data = read_code_data(bytes, ix, pool).map_err(|e| format!("{} of code attribute {}", e, i))?;
-                AttributeData::Code(code_data)
-            }
-            _ => {
-                *ix += length;
-                AttributeData::Other(&bytes[*ix - length .. *ix])
-            }
-        };
-        if expected_end_ix != *ix {
-            return Err(format!("Length mismatch when reading attribute {}", i));
-        }
-        attributes.push(AttributeInfo {
-            name,
-            data,
-        });
-    }
-    Ok(attributes)
 }
 
 bitflags! {

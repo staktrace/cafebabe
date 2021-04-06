@@ -70,6 +70,13 @@ impl<'a> AttributeInfo<'a> {
     }
 }
 
+fn ensure_length(length: usize, expected: usize) -> Result<(), String> {
+    if length != expected {
+        return Err(format!("Unexpected length {} for", length));
+    }
+    Ok(())
+}
+
 fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<CodeData<'a>, String> {
     let max_stack = read_u2(bytes, ix)?;
     let max_locals = read_u2(bytes, ix)?;
@@ -143,9 +150,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
         }
         let data = match name.utf8().deref() {
             "ConstantValue" => {
-                if length != 2 {
-                    return Err(format!("Unexpected length {} for ConstantValue attribute {}", length, i));
-                }
+                ensure_length(length, 2).map_err(|e| format!("{} ConstantValue attribute {}", e, i))?;
                 AttributeData::ConstantValue(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CONSTANTS).map_err(|e| format!("{} value field of ConstantValue attribute {}", e, i))?)
             }
             "Code" => {
@@ -161,23 +166,17 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
                 AttributeData::InnerClasses(innerclasses_data)
             }
             "EnclosingMethod" => {
-                if length != 4 {
-                    return Err(format!("Unexpected length {} for EnclosingMethod attribute {}", length, i));
-                }
+                ensure_length(length, 4).map_err(|e| format!("{} EnclosingMethod attribute {}", e, i))?;
                 let class = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
                 let method = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::NAME_AND_TYPE_OR_ZERO).map_err(|e| format!("{} method info of EnclosingMethod attribute {}", e, i))?;
                 AttributeData::EnclosingMethod(class, method)
             }
             "Synthetic" => {
-                if length != 0 {
-                    return Err(format!("Unexpected length {} for Synthetic attribute {}", length, i));
-                }
+                ensure_length(length, 0).map_err(|e| format!("{} Synthetic attribute {}", e, i))?;
                 AttributeData::Synthetic
             }
             "Signature" => {
-                if length != 2 {
-                    return Err(format!("Unexpected length {} for Signature attribute {}", length, i));
-                }
+                ensure_length(length, 2).map_err(|e| format!("{} Signature attribute {}", e, i))?;
                 AttributeData::Signature(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature field of Signature attribute {}", e, i))?)
             }
             _ => {

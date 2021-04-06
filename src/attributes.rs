@@ -55,6 +55,7 @@ enum AttributeData<'a> {
     EnclosingMethod(Rc<ConstantPoolEntry<'a>>, Rc<ConstantPoolEntry<'a>>),
     Synthetic,
     Signature(Rc<ConstantPoolEntry<'a>>),
+    SourceFile(Rc<ConstantPoolEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -178,6 +179,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
             "Signature" => {
                 ensure_length(length, 2).map_err(|e| format!("{} Signature attribute {}", e, i))?;
                 AttributeData::Signature(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature field of Signature attribute {}", e, i))?)
+            }
+            "SourceFile" => {
+                ensure_length(length, 2).map_err(|e| format!("{} SourceFile attribute {}", e, i))?;
+                AttributeData::SourceFile(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature field of SourceFile attribute {}", e, i))?)
             }
             _ => {
                 *ix += length;

@@ -54,6 +54,7 @@ enum AttributeData<'a> {
     InnerClasses(Vec<InnerClassData<'a>>),
     EnclosingMethod(Rc<ConstantPoolEntry<'a>>, Rc<ConstantPoolEntry<'a>>),
     Synthetic,
+    Signature(Rc<ConstantPoolEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -172,6 +173,12 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
                     return Err(format!("Unexpected length {} for Synthetic attribute {}", length, i));
                 }
                 AttributeData::Synthetic
+            }
+            "Signature" => {
+                if length != 2 {
+                    return Err(format!("Unexpected length {} for Signature attribute {}", length, i));
+                }
+                AttributeData::Signature(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature field of Signature attribute {}", e, i))?)
             }
             _ => {
                 *ix += length;

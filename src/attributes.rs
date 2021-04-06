@@ -52,11 +52,11 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
     *ix += code_length;
     let exception_table_count = read_u2(bytes, ix)?;
     let mut exception_table = Vec::new();
-    for j in 0..exception_table_count {
+    for i in 0..exception_table_count {
         let start_pc = read_u2(bytes, ix)?;
         let end_pc = read_u2(bytes, ix)?;
         let handler_pc = read_u2(bytes, ix)?;
-        let catch_type = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} catch type of exception table entry {}", e, j))?;
+        let catch_type = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} catch type of exception table entry {}", e, i))?;
         exception_table.push(ExceptionTableEntry {
             start_pc,
             end_pc,

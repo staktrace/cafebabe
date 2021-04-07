@@ -99,6 +99,7 @@ bitflags! {
         const SYNTHETIC = 0x1000;
         const ANNOTATION = 0x2000;
         const ENUM = 0x4000;
+        const MANDATED = 0x8000;
     }
 }
 

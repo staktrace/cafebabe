@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use crate::{read_u2, read_u4, read_cp_ref, AccessFlags};
+use crate::{read_u1, read_u2, read_u4, read_cp_ref, AccessFlags};
 use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes};
 
 #[derive(Debug)]
@@ -75,6 +75,20 @@ pub struct BootstrapMethodEntry<'a> {
     arguments: Vec<Rc<ConstantPoolEntry<'a>>>,
 }
 
+bitflags! {
+    pub struct MethodParameterAccessFlags: u16 {
+        const FINAL = AccessFlags::FINAL.bits();
+        const SYNTHETIC = AccessFlags::SYNTHETIC.bits();
+        const MANDATED = AccessFlags::MANDATED.bits();
+    }
+}
+
+#[derive(Debug)]
+pub struct MethodParameterEntry<'a> {
+    name: Rc<ConstantPoolEntry<'a>>,
+    pub access_flags: MethodParameterAccessFlags,
+}
+
 #[derive(Debug)]
 enum AttributeData<'a> {
     ConstantValue(Rc<ConstantPoolEntry<'a>>),
@@ -93,6 +107,7 @@ enum AttributeData<'a> {
     Deprecated,
     // TODO: all the annotation ones
     BootstrapMethods(Vec<BootstrapMethodEntry<'a>>),
+    MethodParameters(Vec<MethodParameterEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -250,6 +265,20 @@ fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     Ok(bootstrapmethods)
 }
 
+fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodParameterEntry<'a>>, String> {
+    let mut methodparameters = Vec::new();
+    let count = read_u1(bytes, ix)?;
+    for i in 0..count {
+        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8_OR_ZERO).map_err(|e| format!("{} name of method parameter {}", e, i))?;
+        let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on method parameter {}", i))?;
+        methodparameters.push(MethodParameterEntry {
+            name,
+            access_flags,
+        });
+    }
+    Ok(methodparameters)
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for i in 0..attributes_count {
@@ -319,6 +348,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
             "BootstrapMethods" => {
                 let bootstrapmethods_data = read_bootstrapmethods_data(bytes, ix, pool).map_err(|e| format!("{} of BootstrapMethods attribute {}", e, i))?;
                 AttributeData::BootstrapMethods(bootstrapmethods_data)
+            }
+            "MethodParameters" => {
+                let methodparameters_data = read_methodparameters_data(bytes, ix, pool).map_err(|e| format!("{} of MethodParameters attribute {}", e, i))?;
+                AttributeData::MethodParameters(methodparameters_data)
             }
             _ => {
                 *ix += length;

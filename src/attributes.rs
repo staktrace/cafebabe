@@ -42,7 +42,7 @@ pub struct InnerClassEntry<'a> {
     inner_class_info: Rc<ConstantPoolEntry<'a>>,
     outer_class_info: Rc<ConstantPoolEntry<'a>>,
     inner_name: Rc<ConstantPoolEntry<'a>>,
-    pub inner_class_access_flags: InnerClassAccessFlags,
+    pub access_flags: InnerClassAccessFlags,
 }
 
 #[derive(Debug)]
@@ -181,12 +181,12 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
         let inner_class_info = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} inner class info for inner class {}", e, i))?;
         let outer_class_info = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
         let inner_name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8_OR_ZERO).map_err(|e| format!("{} inner name for inner class {}", e, i))?;
-        let inner_class_access_flags = InnerClassAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on inner class {}", i))?;
+        let access_flags = InnerClassAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on inner class {}", i))?;
         innerclasses.push(InnerClassEntry {
             inner_class_info,
             outer_class_info,
             inner_name,
-            inner_class_access_flags,
+            access_flags,
         });
     }
     Ok(innerclasses)

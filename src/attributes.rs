@@ -70,6 +70,12 @@ pub struct LocalVariableTypeEntry<'a> {
 }
 
 #[derive(Debug)]
+pub struct BootstrapMethodEntry<'a> {
+    method: Rc<ConstantPoolEntry<'a>>,
+    arguments: Vec<Rc<ConstantPoolEntry<'a>>>,
+}
+
+#[derive(Debug)]
 enum AttributeData<'a> {
     ConstantValue(Rc<ConstantPoolEntry<'a>>),
     Code(CodeData<'a>),
@@ -85,6 +91,8 @@ enum AttributeData<'a> {
     LocalVariableTable(Vec<LocalVariableEntry<'a>>),
     LocalVariableTypeTable(Vec<LocalVariableTypeEntry<'a>>),
     Deprecated,
+    // TODO: all the annotation ones
+    BootstrapMethods(Vec<BootstrapMethodEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -223,6 +231,25 @@ fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<C
     Ok(localvariabletypes)
 }
 
+fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<BootstrapMethodEntry<'a>>, String> {
+    let mut bootstrapmethods = Vec::new();
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
+        let method = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::METHOD_HANDLE).map_err(|e| format!("{} method ref for bootstrap method {}", e, i))?;
+        let mut arguments = Vec::new();
+        let arg_count = read_u2(bytes, ix)?;
+        for j in 0..arg_count {
+            let argument = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::BOOTSTRAP_ARGUMENT).map_err(|e| format!("{} argument {} of bootstrap method {}", e, j, i))?;
+            arguments.push(argument);
+        }
+        bootstrapmethods.push(BootstrapMethodEntry {
+            method,
+            arguments,
+        });
+    }
+    Ok(bootstrapmethods)
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
     for i in 0..attributes_count {
@@ -288,6 +315,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_co
             "Deprecated" => {
                 ensure_length(length, 0).map_err(|e| format!("{} Deprecated attribute {}", e, i))?;
                 AttributeData::Deprecated
+            }
+            "BootstrapMethods" => {
+                let bootstrapmethods_data = read_bootstrapmethods_data(bytes, ix, pool).map_err(|e| format!("{} of BootstrapMethods attribute {}", e, i))?;
+                AttributeData::BootstrapMethods(bootstrapmethods_data)
             }
             _ => {
                 *ix += length;

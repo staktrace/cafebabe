@@ -3,14 +3,14 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, read_cp_ref};
+use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, read_cp_ref, read_cp_utf8, read_cp_utf8_or_zero, read_cp_classinfo, read_cp_classinfo_or_zero};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
     pub start_pc: u16,
     pub end_pc: u16,
     pub handler_pc: u16,
-    catch_type: Rc<ConstantPoolEntry<'a>>,
+    pub catch_type: Option<Cow<'a, str>>,
 }
 
 #[derive(Debug)]
@@ -39,9 +39,9 @@ bitflags! {
 
 #[derive(Debug)]
 pub struct InnerClassEntry<'a> {
-    inner_class_info: Rc<ConstantPoolEntry<'a>>,
-    outer_class_info: Rc<ConstantPoolEntry<'a>>,
-    inner_name: Rc<ConstantPoolEntry<'a>>,
+    pub inner_class_info: Cow<'a, str>,
+    pub outer_class_info: Option<Cow<'a, str>>,
+    pub inner_name: Option<Cow<'a, str>>,
     pub access_flags: InnerClassAccessFlags,
 }
 
@@ -55,8 +55,8 @@ pub struct LineNumberEntry {
 pub struct LocalVariableEntry<'a> {
     pub start_pc: u16,
     pub length: u16,
-    name: Rc<ConstantPoolEntry<'a>>,
-    descriptor: Rc<ConstantPoolEntry<'a>>,
+    pub name: Cow<'a, str>,
+    pub descriptor: Cow<'a, str>,
     pub index: u16,
 }
 
@@ -64,8 +64,8 @@ pub struct LocalVariableEntry<'a> {
 pub struct LocalVariableTypeEntry<'a> {
     pub start_pc: u16,
     pub length: u16,
-    name: Rc<ConstantPoolEntry<'a>>,
-    signature: Rc<ConstantPoolEntry<'a>>,
+    pub name: Cow<'a, str>,
+    pub signature: Cow<'a, str>,
     pub index: u16,
 }
 
@@ -85,7 +85,7 @@ bitflags! {
 
 #[derive(Debug)]
 pub struct MethodParameterEntry<'a> {
-    name: Rc<ConstantPoolEntry<'a>>,
+    pub name: Option<Cow<'a, str>>,
     pub access_flags: MethodParameterAccessFlags,
 }
 
@@ -94,12 +94,12 @@ enum AttributeData<'a> {
     ConstantValue(Rc<ConstantPoolEntry<'a>>),
     Code(CodeData<'a>),
     // TODO: StackMapTable - this looks complicated and I don't need it right now so skipping for now
-    Exceptions(Vec<Rc<ConstantPoolEntry<'a>>>),
+    Exceptions(Vec<Cow<'a, str>>),
     InnerClasses(Vec<InnerClassEntry<'a>>),
-    EnclosingMethod(Rc<ConstantPoolEntry<'a>>, Rc<ConstantPoolEntry<'a>>),
+    EnclosingMethod(Cow<'a, str>, Rc<ConstantPoolEntry<'a>>),
     Synthetic,
-    Signature(Rc<ConstantPoolEntry<'a>>),
-    SourceFile(Rc<ConstantPoolEntry<'a>>),
+    Signature(Cow<'a, str>),
+    SourceFile(Cow<'a, str>),
     SourceDebugExtension(Cow<'a, str>),
     LineNumberTable(Vec<LineNumberEntry>),
     LocalVariableTable(Vec<LocalVariableEntry<'a>>),
@@ -113,14 +113,8 @@ enum AttributeData<'a> {
 
 #[derive(Debug)]
 pub struct AttributeInfo<'a> {
-    name: Rc<ConstantPoolEntry<'a>>,
+    pub name: Cow<'a, str>,
     data: AttributeData<'a>,
-}
-
-impl<'a> AttributeInfo<'a> {
-    pub fn name(&self) -> Cow<'a, str> {
-        self.name.utf8()
-    }
 }
 
 fn ensure_length(length: usize, expected: usize) -> Result<(), String> {
@@ -145,7 +139,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
         let start_pc = read_u2(bytes, ix)?;
         let end_pc = read_u2(bytes, ix)?;
         let handler_pc = read_u2(bytes, ix)?;
-        let catch_type = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} catch type of exception table entry {}", e, i))?;
+        let catch_type = read_cp_classinfo_or_zero(bytes, ix, pool).map_err(|e| format!("{} catch type of exception table entry {}", e, i))?;
         exception_table.push(ExceptionTableEntry {
             start_pc,
             end_pc,
@@ -163,11 +157,11 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
     })
 }
 
-fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
+fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
     let mut exceptions = Vec::new();
     let exceptions_count = read_u2(bytes, ix)?;
     for i in 0..exceptions_count {
-        let exception = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} exception {}", e, i))?;
+        let exception = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} exception {}", e, i))?;
         exceptions.push(exception);
     }
     Ok(exceptions)
@@ -177,9 +171,9 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
     let mut innerclasses = Vec::new();
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
-        let inner_class_info = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} inner class info for inner class {}", e, i))?;
-        let outer_class_info = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
-        let inner_name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8_OR_ZERO).map_err(|e| format!("{} inner name for inner class {}", e, i))?;
+        let inner_class_info = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} inner class info for inner class {}", e, i))?;
+        let outer_class_info = read_cp_classinfo_or_zero(bytes, ix, pool).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
+        let inner_name = read_cp_utf8_or_zero(bytes, ix, pool).map_err(|e| format!("{} inner name for inner class {}", e, i))?;
         let access_flags = InnerClassAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on inner class {}", i))?;
         innerclasses.push(InnerClassEntry {
             inner_class_info,
@@ -211,8 +205,8 @@ fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     for i in 0..count {
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
-        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name for variable {}", e, i))?;
-        let descriptor = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor for variable {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name for variable {}", e, i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor for variable {}", e, i))?;
         let index = read_u2(bytes, ix)?;
         localvariables.push(LocalVariableEntry {
             start_pc,
@@ -231,8 +225,8 @@ fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<C
     for i in 0..count {
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
-        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name for variable {}", e, i))?;
-        let signature = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature for variable {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name for variable {}", e, i))?;
+        let signature = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} signature for variable {}", e, i))?;
         let index = read_u2(bytes, ix)?;
         localvariabletypes.push(LocalVariableTypeEntry {
             start_pc,
@@ -268,7 +262,7 @@ fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     let mut methodparameters = Vec::new();
     let count = read_u1(bytes, ix)?;
     for i in 0..count {
-        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8_OR_ZERO).map_err(|e| format!("{} name of method parameter {}", e, i))?;
+        let name = read_cp_utf8_or_zero(bytes, ix, pool).map_err(|e| format!("{} name of method parameter {}", e, i))?;
         let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on method parameter {}", i))?;
         methodparameters.push(MethodParameterEntry {
             name,
@@ -282,13 +276,13 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     let mut attributes = Vec::new();
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
-        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of attribute {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name field of attribute {}", e, i))?;
         let length = read_u4(bytes, ix)? as usize;
         let expected_end_ix = *ix + length;
         if bytes.len() < expected_end_ix {
             return Err(format!("Unexpected end of stream reading attributes at index {}", *ix));
         }
-        let data = match name.utf8().deref() {
+        let data = match name.deref() {
             "ConstantValue" => {
                 ensure_length(length, 2).map_err(|e| format!("{} ConstantValue attribute {}", e, i))?;
                 AttributeData::ConstantValue(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CONSTANTS).map_err(|e| format!("{} value field of ConstantValue attribute {}", e, i))?)
@@ -307,7 +301,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             }
             "EnclosingMethod" => {
                 ensure_length(length, 4).map_err(|e| format!("{} EnclosingMethod attribute {}", e, i))?;
-                let class = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
+                let class = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
                 let method = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::NAME_AND_TYPE_OR_ZERO).map_err(|e| format!("{} method info of EnclosingMethod attribute {}", e, i))?;
                 AttributeData::EnclosingMethod(class, method)
             }
@@ -317,11 +311,11 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             }
             "Signature" => {
                 ensure_length(length, 2).map_err(|e| format!("{} Signature attribute {}", e, i))?;
-                AttributeData::Signature(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature field of Signature attribute {}", e, i))?)
+                AttributeData::Signature(read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} signature field of Signature attribute {}", e, i))?)
             }
             "SourceFile" => {
                 ensure_length(length, 2).map_err(|e| format!("{} SourceFile attribute {}", e, i))?;
-                AttributeData::SourceFile(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} signature field of SourceFile attribute {}", e, i))?)
+                AttributeData::SourceFile(read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} signature field of SourceFile attribute {}", e, i))?)
             }
             "SourceDebugExtension" => {
                 let modified_utf8_data = &bytes[*ix .. *ix + length];

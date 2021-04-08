@@ -94,10 +94,8 @@ bitflags! {
         const INVOKE_DYNAMIC = 0x4000;
         const UNUSED = 0x8000;
 
-        const CLASS_OR_ZERO = Self::ZERO.bits() | Self::CLASS_INFO.bits();
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
         const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();
-        const UTF8_OR_ZERO = Self::ZERO.bits() | Self::UTF8.bits();
         const NAME_AND_TYPE_OR_ZERO = Self::ZERO.bits() | Self::NAME_AND_TYPE.bits();
         const BOOTSTRAP_ARGUMENT = Self::CONSTANTS.bits() | Self::CLASS_INFO.bits() | Self::METHOD_HANDLE.bits() | Self::METHOD_TYPE.bits();
     }
@@ -385,6 +383,15 @@ pub(crate) fn read_cp_utf8<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Utf8(x) => Ok(x.clone()),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+pub(crate) fn read_cp_utf8_or_zero<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Option<Cow<'a, str>>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Zero => Ok(None),
+        ConstantPoolEntry::Utf8(x) => Ok(Some(x.clone())),
         _ => err("Unexpected constant pool reference type for")
     }
 }

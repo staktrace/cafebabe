@@ -71,9 +71,10 @@ pub(crate) enum BootstrapMethodRef {
     Unresolved(u16),
 }
 
-fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, interfaces_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
+fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
     let mut interfaces = Vec::new();
-    for i in 0..interfaces_count {
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
         interfaces.push(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?);
     }
     Ok(interfaces)
@@ -135,14 +136,14 @@ impl<'a> FieldInfo<'a> {
     }
 }
 
-fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, fields_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, String> {
+fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, String> {
     let mut fields = Vec::new();
-    for i in 0..fields_count {
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on field")?;
         let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name of class field {}", e, i))?;
         let descriptor = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor of class field {}", e, i))?;
-        let attributes_count = read_u2(bytes, ix)?;
-        let attributes = read_attributes(bytes, ix, attributes_count, pool).map_err(|e| format!("{} of class field {}", e, i))?;
+        let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of class field {}", e, i))?;
         fields.push(FieldInfo {
             access_flags,
             name,
@@ -188,14 +189,14 @@ impl<'a> MethodInfo<'a> {
     }
 }
 
-fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, methods_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodInfo<'a>>, String> {
+fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodInfo<'a>>, String> {
     let mut methods = Vec::new();
-    for i in 0..methods_count {
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on method")?;
         let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name of class method {}", e, i))?;
         let descriptor = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor of class method {}", e, i))?;
-        let attributes_count = read_u2(bytes, ix)?;
-        let attributes = read_attributes(bytes, ix, attributes_count, pool).map_err(|e| format!("{} of class method {}", e, i))?;
+        let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of class method {}", e, i))?;
         methods.push(MethodInfo {
             access_flags,
             name,
@@ -266,14 +267,10 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
     let this_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
     let super_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} super_class", e))?;
-    let interfaces_count = read_u2(raw_bytes, &mut ix)?;
-    let interfaces = read_interfaces(raw_bytes, &mut ix, interfaces_count, &constant_pool)?;
-    let fields_count = read_u2(raw_bytes, &mut ix)?;
-    let fields = read_fields(raw_bytes, &mut ix, fields_count, &constant_pool)?;
-    let methods_count = read_u2(raw_bytes, &mut ix)?;
-    let methods = read_methods(raw_bytes, &mut ix, methods_count, &constant_pool)?;
-    let attributes_count = read_u2(raw_bytes, &mut ix)?;
-    let attributes = read_attributes(raw_bytes, &mut ix, attributes_count, &constant_pool).map_err(|e| format!("{} of class", e))?;
+    let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
+    let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
+    let methods = read_methods(raw_bytes, &mut ix, &constant_pool)?;
+    let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} of class", e))?;
 
     let class_file = ClassFile {
         major_version,

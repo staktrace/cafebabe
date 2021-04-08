@@ -153,8 +153,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
             catch_type,
         });
     }
-    let code_attributes_count = read_u2(bytes, ix)?;
-    let code_attributes = read_attributes(bytes, ix, code_attributes_count, pool).map_err(|e| format!("{} of code attribute", e))?;
+    let code_attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of code attribute", e))?;
     Ok(CodeData {
         max_stack,
         max_locals,
@@ -279,9 +278,10 @@ fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     Ok(methodparameters)
 }
 
-pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, attributes_count: u16, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
+pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let mut attributes = Vec::new();
-    for i in 0..attributes_count {
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
         let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name field of attribute {}", e, i))?;
         let length = read_u4(bytes, ix)? as usize;
         let expected_end_ix = *ix + length;

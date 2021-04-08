@@ -387,7 +387,7 @@ pub(crate) fn read_cp_utf8<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     }
 }
 
-pub(crate) fn read_cp_utf8_or_zero<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Option<Cow<'a, str>>, String> {
+pub(crate) fn read_cp_utf8_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Option<Cow<'a, str>>, String> {
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
@@ -404,7 +404,7 @@ pub(crate) fn read_cp_classinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<
     }
 }
 
-pub(crate) fn read_cp_classinfo_or_zero<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Option<Cow<'a, str>>, String> {
+pub(crate) fn read_cp_classinfo_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Option<Cow<'a, str>>, String> {
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),

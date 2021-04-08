@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, read_cp_ref, read_cp_utf8, read_cp_utf8_or_zero, read_cp_classinfo, read_cp_classinfo_or_zero};
+use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, read_cp_ref, read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -139,7 +139,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
         let start_pc = read_u2(bytes, ix)?;
         let end_pc = read_u2(bytes, ix)?;
         let handler_pc = read_u2(bytes, ix)?;
-        let catch_type = read_cp_classinfo_or_zero(bytes, ix, pool).map_err(|e| format!("{} catch type of exception table entry {}", e, i))?;
+        let catch_type = read_cp_classinfo_opt(bytes, ix, pool).map_err(|e| format!("{} catch type of exception table entry {}", e, i))?;
         exception_table.push(ExceptionTableEntry {
             start_pc,
             end_pc,
@@ -172,8 +172,8 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
         let inner_class_info = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} inner class info for inner class {}", e, i))?;
-        let outer_class_info = read_cp_classinfo_or_zero(bytes, ix, pool).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
-        let inner_name = read_cp_utf8_or_zero(bytes, ix, pool).map_err(|e| format!("{} inner name for inner class {}", e, i))?;
+        let outer_class_info = read_cp_classinfo_opt(bytes, ix, pool).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
+        let inner_name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} inner name for inner class {}", e, i))?;
         let access_flags = InnerClassAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on inner class {}", i))?;
         innerclasses.push(InnerClassEntry {
             inner_class_info,
@@ -262,7 +262,7 @@ fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     let mut methodparameters = Vec::new();
     let count = read_u1(bytes, ix)?;
     for i in 0..count {
-        let name = read_cp_utf8_or_zero(bytes, ix, pool).map_err(|e| format!("{} name of method parameter {}", e, i))?;
+        let name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} name of method parameter {}", e, i))?;
         let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on method parameter {}", i))?;
         methodparameters.push(MethodParameterEntry {
             name,

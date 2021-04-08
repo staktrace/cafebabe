@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 use crate::attributes::{AttributeInfo, read_attributes};
-use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_or_zero};
+use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
 
 pub(crate) fn err<T>(msg: &'static str) -> Result<T, String> {
     Err(msg.to_string())
@@ -225,7 +225,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
 
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
     let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?;
-    let super_class = read_cp_classinfo_or_zero(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} super_class", e))?;
+    let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} super_class", e))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
     let methods = read_methods(raw_bytes, &mut ix, &constant_pool)?;

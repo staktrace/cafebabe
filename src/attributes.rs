@@ -3,8 +3,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, NameAndType, LiteralConstant, MethodHandle};
-use crate::constant_pool::{read_cp_ref, read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt, read_cp_literalconstant, read_cp_methodhandle};
+use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, MethodHandle, BootstrapArgument};
+use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt, read_cp_literalconstant, read_cp_methodhandle, read_cp_bootstrap_argument};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -73,7 +73,7 @@ pub struct LocalVariableTypeEntry<'a> {
 #[derive(Debug)]
 pub struct BootstrapMethodEntry<'a> {
     pub method: MethodHandle<'a>,
-    arguments: Vec<Rc<ConstantPoolEntry<'a>>>,
+    pub arguments: Vec<BootstrapArgument<'a>>,
 }
 
 bitflags! {
@@ -91,7 +91,7 @@ pub struct MethodParameterEntry<'a> {
 }
 
 #[derive(Debug)]
-enum AttributeData<'a> {
+pub enum AttributeData<'a> {
     ConstantValue(LiteralConstant<'a>),
     Code(CodeData<'a>),
     // TODO: StackMapTable - this looks complicated and I don't need it right now so skipping for now
@@ -115,7 +115,7 @@ enum AttributeData<'a> {
 #[derive(Debug)]
 pub struct AttributeInfo<'a> {
     pub name: Cow<'a, str>,
-    data: AttributeData<'a>,
+    pub data: AttributeData<'a>,
 }
 
 fn ensure_length(length: usize, expected: usize) -> Result<(), String> {
@@ -248,7 +248,7 @@ fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
         let mut arguments = Vec::new();
         let arg_count = read_u2(bytes, ix)?;
         for j in 0..arg_count {
-            let argument = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::BOOTSTRAP_ARGUMENT).map_err(|e| format!("{} argument {} of bootstrap method {}", e, j, i))?;
+            let argument = read_cp_bootstrap_argument(bytes, ix, pool).map_err(|e| format!("{} argument {} of bootstrap method {}", e, j, i))?;
             arguments.push(argument);
         }
         bootstrapmethods.push(BootstrapMethodEntry {

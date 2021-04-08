@@ -6,11 +6,10 @@ mod attributes;
 mod constant_pool;
 
 use std::borrow::Cow;
-use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::attributes::{AttributeInfo, read_attributes};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, read_constant_pool, read_cp_ref};
+use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_or_zero};
 
 pub(crate) fn err<T>(msg: &'static str) -> Result<T, String> {
     Err(msg.to_string())
@@ -71,11 +70,11 @@ pub(crate) enum BootstrapMethodRef {
     Unresolved(u16),
 }
 
-fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
+fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
     let mut interfaces = Vec::new();
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
-        interfaces.push(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} interface {}", e, i))?);
+        interfaces.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} interface {}", e, i))?);
     }
     Ok(interfaces)
 }
@@ -121,19 +120,9 @@ bitflags! {
 #[derive(Debug)]
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
-    name: Rc<ConstantPoolEntry<'a>>,
-    descriptor: Rc<ConstantPoolEntry<'a>>,
+    pub name: Cow<'a, str>,
+    pub descriptor: Cow<'a, str>,
     pub attributes: Vec<AttributeInfo<'a>>,
-}
-
-impl<'a> FieldInfo<'a> {
-    pub fn name(&self) -> Cow<'a, str> {
-        self.name.utf8()
-    }
-
-    pub fn descriptor(&self) -> Cow<'a, str> {
-        self.descriptor.utf8()
-    }
 }
 
 fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, String> {
@@ -141,8 +130,8 @@ fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on field")?;
-        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name of class field {}", e, i))?;
-        let descriptor = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor of class field {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of class field {}", e, i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor of class field {}", e, i))?;
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of class field {}", e, i))?;
         fields.push(FieldInfo {
             access_flags,
@@ -174,19 +163,9 @@ bitflags! {
 #[derive(Debug)]
 pub struct MethodInfo<'a> {
     pub access_flags: MethodAccessFlags,
-    name: Rc<ConstantPoolEntry<'a>>,
-    descriptor: Rc<ConstantPoolEntry<'a>>,
+    pub name: Cow<'a, str>,
+    pub descriptor: Cow<'a, str>,
     pub attributes: Vec<AttributeInfo<'a>>,
-}
-
-impl<'a> MethodInfo<'a> {
-    pub fn name(&self) -> Cow<'a, str> {
-        self.name.utf8()
-    }
-
-    pub fn descriptor(&self) -> Cow<'a, str> {
-        self.descriptor.utf8()
-    }
 }
 
 fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodInfo<'a>>, String> {
@@ -194,8 +173,8 @@ fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntr
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on method")?;
-        let name = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} name of class method {}", e, i))?;
-        let descriptor = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::UTF8).map_err(|e| format!("{} descriptor of class method {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of class method {}", e, i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor of class method {}", e, i))?;
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of class method {}", e, i))?;
         methods.push(MethodInfo {
             access_flags,
@@ -226,32 +205,12 @@ pub struct ClassFile<'a> {
     pub minor_version: u16,
     constant_pool: Vec<Rc<ConstantPoolEntry<'a>>>,
     pub access_flags: ClassAccessFlags,
-    this_class: Rc<ConstantPoolEntry<'a>>,
-    super_class: Rc<ConstantPoolEntry<'a>>,
-    interfaces: Vec<Rc<ConstantPoolEntry<'a>>>,
+    pub this_class: Cow<'a, str>,
+    pub super_class: Option<Cow<'a, str>>,
+    pub interfaces: Vec<Cow<'a, str>>,
     pub fields: Vec<FieldInfo<'a>>,
     pub methods: Vec<MethodInfo<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
-}
-
-impl<'a> ClassFile<'a> {
-    pub fn this_class_name(&self) -> Cow<'a, str> {
-        self.this_class.classinfo_utf8()
-    }
-
-    pub fn super_class_name(&self) -> Option<Cow<'a, str>> {
-        match self.super_class.deref() {
-            ConstantPoolEntry::Zero => None,
-            _ => Some(self.super_class.classinfo_utf8()),
-        }
-    }
-
-    pub fn interface_names(&self) -> Vec<Cow<'a, str>> {
-        self.interfaces
-            .iter()
-            .map(|interface| interface.classinfo_utf8())
-            .collect()
-    }
 }
 
 pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
@@ -265,8 +224,8 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     let constant_pool = read_constant_pool(raw_bytes, &mut ix, constant_pool_count, major_version)?;
 
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
-    let this_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool, ConstantPoolEntryTypes::CLASS_INFO).map_err(|e| format!("{} this_class", e))?;
-    let super_class = read_cp_ref(raw_bytes, &mut ix, &constant_pool, ConstantPoolEntryTypes::CLASS_OR_ZERO).map_err(|e| format!("{} super_class", e))?;
+    let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?;
+    let super_class = read_cp_classinfo_or_zero(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} super_class", e))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
     let methods = read_methods(raw_bytes, &mut ix, &constant_pool)?;

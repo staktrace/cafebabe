@@ -9,7 +9,7 @@ fn main() {
         file.read_to_end(&mut bytes).unwrap();
         println!("Dumping {:?}", arg);
         let class = cafebabe::parse_class(&bytes).unwrap();
-        println!("{:?}", class.this_class_name());
+        println!("{:?}", class.this_class);
         println!("{:?}", class);
     }
 }

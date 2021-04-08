@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{err, read_u1, read_u2, read_u4, read_u8, BootstrapMethodRef};
@@ -213,13 +214,6 @@ impl<'a> ConstantPoolEntry<'a> {
             _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
         }
     }
-
-    pub(crate) fn classinfo_utf8(&self) -> Cow<'a, str> {
-        match self {
-            ConstantPoolEntry::ClassInfo(x) => x.borrow().get().utf8(),
-            _ => panic!("Attempting to get classinfo data from non-classinfo constant pool entry!"),
-        }
-    }
 }
 
 fn read_unresolved_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
@@ -373,11 +367,41 @@ pub(crate) fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_p
     Ok(constant_pool)
 }
 
-pub(crate) fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], allowed: ConstantPoolEntryTypes) -> Result<Rc<ConstantPoolEntry<'a>>, String> {
+fn read_cp_ref_any<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Rc<ConstantPoolEntry<'a>>, String> {
     let cp_index = read_u2(bytes, ix)? as usize;
     if cp_index >= pool.len() {
         return Err(format!("Out-of-bounds index {} in constant pool reference for", cp_index));
     }
-    pool[cp_index].ensure_type(allowed)?;
     Ok(pool[cp_index].clone())
+}
+
+pub(crate) fn read_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], allowed: ConstantPoolEntryTypes) -> Result<Rc<ConstantPoolEntry<'a>>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    cp_ref.ensure_type(allowed)?;
+    Ok(cp_ref)
+}
+
+pub(crate) fn read_cp_utf8<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Cow<'a, str>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Utf8(x) => Ok(x.clone()),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+pub(crate) fn read_cp_classinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Cow<'a, str>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::ClassInfo(x) => Ok(x.borrow().get().utf8()),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+pub(crate) fn read_cp_classinfo_or_zero<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Option<Cow<'a, str>>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Zero => Ok(None),
+        ConstantPoolEntry::ClassInfo(x) => Ok(Some(x.borrow().get().utf8())),
+        _ => err("Unexpected constant pool reference type for")
+    }
 }

@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use crate::{read_u1, read_u2, read_u4, read_cp_ref, AccessFlags};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes};
+use crate::{read_u1, read_u2, read_u4, AccessFlags};
+use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, read_cp_ref};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {

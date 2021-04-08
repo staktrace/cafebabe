@@ -62,7 +62,7 @@ impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum ReferenceKind {
     GetField,
     GetStatic,
@@ -205,10 +205,24 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
-    pub(crate) fn utf8(&self) -> Cow<'a, str> {
+    fn utf8(&self) -> Cow<'a, str> {
         match self {
             ConstantPoolEntry::Utf8(x) => x.clone(),
             _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        }
+    }
+
+    fn classinfo(&self) -> Cow<'a, str> {
+        match self {
+            ConstantPoolEntry::ClassInfo(x) => x.borrow().get().utf8(),
+            _ => panic!("Attempting to get classinfo data from non-classinfo constant pool entry!"),
+        }
+    }
+
+    fn name_and_type(&self) -> NameAndType<'a> {
+        match self {
+            ConstantPoolEntry::NameAndType(x, y) => NameAndType { name: x.borrow().get().utf8(), descriptor: y.borrow().get().utf8() },
+            _ => panic!("Attempting to get name and type data from non-name-and-type constant pool entry!"),
         }
     }
 }
@@ -444,6 +458,42 @@ pub(crate) fn read_cp_literalconstant<'a>(bytes: &'a [u8], ix: &mut usize, pool:
         ConstantPoolEntry::Long(v) => Ok(LiteralConstant::Long(*v)),
         ConstantPoolEntry::Double(v) => Ok(LiteralConstant::Double(*v)),
         ConstantPoolEntry::String(v) => Ok(LiteralConstant::String(v.borrow().get().utf8())),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum MemberKind {
+    Field,
+    Method,
+    InterfaceMethod,
+}
+
+#[derive(Debug)]
+pub struct MethodHandle<'a> {
+    pub kind: ReferenceKind,
+    pub class_name: Cow<'a, str>,
+    pub member_kind: MemberKind,
+    pub member_ref: NameAndType<'a>,
+}
+
+pub(crate) fn read_cp_methodhandle<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<MethodHandle<'a>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::MethodHandle(x, y) => {
+            let (class_name, member_kind, member_ref) = match y.borrow().get().deref() {
+                ConstantPoolEntry::FieldRef(c, m) => (c.borrow().get().classinfo(), MemberKind::Field, m.borrow().get().name_and_type()),
+                ConstantPoolEntry::MethodRef(c, m) => (c.borrow().get().classinfo(), MemberKind::Method, m.borrow().get().name_and_type()),
+                ConstantPoolEntry::InterfaceMethodRef(c, m) => (c.borrow().get().classinfo(), MemberKind::InterfaceMethod, m.borrow().get().name_and_type()),
+                _ => return err("Unexpected constant pool reference type for"),
+            };
+            Ok(MethodHandle {
+                kind: *x,
+                class_name,
+                member_kind,
+                member_ref
+            })
+        }
         _ => err("Unexpected constant pool reference type for")
     }
 }

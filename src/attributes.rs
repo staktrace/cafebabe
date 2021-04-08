@@ -3,8 +3,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, NameAndType, LiteralConstant};
-use crate::constant_pool::{read_cp_ref, read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt, read_cp_literalconstant};
+use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, NameAndType, LiteralConstant, MethodHandle};
+use crate::constant_pool::{read_cp_ref, read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt, read_cp_literalconstant, read_cp_methodhandle};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -72,7 +72,7 @@ pub struct LocalVariableTypeEntry<'a> {
 
 #[derive(Debug)]
 pub struct BootstrapMethodEntry<'a> {
-    method: Rc<ConstantPoolEntry<'a>>,
+    pub method: MethodHandle<'a>,
     arguments: Vec<Rc<ConstantPoolEntry<'a>>>,
 }
 
@@ -244,7 +244,7 @@ fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     let mut bootstrapmethods = Vec::new();
     let count = read_u2(bytes, ix)?;
     for i in 0..count {
-        let method = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::METHOD_HANDLE).map_err(|e| format!("{} method ref for bootstrap method {}", e, i))?;
+        let method = read_cp_methodhandle(bytes, ix, pool).map_err(|e| format!("{} method ref for bootstrap method {}", e, i))?;
         let mut arguments = Vec::new();
         let arg_count = read_u2(bytes, ix)?;
         for j in 0..arg_count {

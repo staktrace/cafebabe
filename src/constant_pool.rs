@@ -96,7 +96,6 @@ bitflags! {
 
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
         const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();
-        const NAME_AND_TYPE_OR_ZERO = Self::ZERO.bits() | Self::NAME_AND_TYPE.bits();
         const BOOTSTRAP_ARGUMENT = Self::CONSTANTS.bits() | Self::CLASS_INFO.bits() | Self::METHOD_HANDLE.bits() | Self::METHOD_TYPE.bits();
     }
 }
@@ -409,6 +408,42 @@ pub(crate) fn read_cp_classinfo_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool: &
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
         ConstantPoolEntry::ClassInfo(x) => Ok(Some(x.borrow().get().utf8())),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+#[derive(Debug)]
+pub struct NameAndType<'a> {
+    pub name: Cow<'a, str>,
+    pub descriptor: Cow<'a, str>,
+}
+
+pub(crate) fn read_cp_nameandtype_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Option<NameAndType<'a>>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Zero => Ok(None),
+        ConstantPoolEntry::NameAndType(x, y) => Ok(Some(NameAndType { name: x.borrow().get().utf8(), descriptor: y.borrow().get().utf8() })),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+#[derive(Debug)]
+pub enum LiteralConstant<'a> {
+    Integer(i32),
+    Float(f32),
+    Long(i64),
+    Double(f64),
+    String(Cow<'a, str>),
+}
+
+pub(crate) fn read_cp_literalconstant<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<LiteralConstant<'a>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Integer(v) => Ok(LiteralConstant::Integer(*v)),
+        ConstantPoolEntry::Float(v) => Ok(LiteralConstant::Float(*v)),
+        ConstantPoolEntry::Long(v) => Ok(LiteralConstant::Long(*v)),
+        ConstantPoolEntry::Double(v) => Ok(LiteralConstant::Double(*v)),
+        ConstantPoolEntry::String(v) => Ok(LiteralConstant::String(v.borrow().get().utf8())),
         _ => err("Unexpected constant pool reference type for")
     }
 }

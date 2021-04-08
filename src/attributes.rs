@@ -3,7 +3,8 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, read_cp_ref, read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt};
+use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, NameAndType, LiteralConstant};
+use crate::constant_pool::{read_cp_ref, read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt, read_cp_literalconstant};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -91,12 +92,12 @@ pub struct MethodParameterEntry<'a> {
 
 #[derive(Debug)]
 enum AttributeData<'a> {
-    ConstantValue(Rc<ConstantPoolEntry<'a>>),
+    ConstantValue(LiteralConstant<'a>),
     Code(CodeData<'a>),
     // TODO: StackMapTable - this looks complicated and I don't need it right now so skipping for now
     Exceptions(Vec<Cow<'a, str>>),
     InnerClasses(Vec<InnerClassEntry<'a>>),
-    EnclosingMethod(Cow<'a, str>, Rc<ConstantPoolEntry<'a>>),
+    EnclosingMethod(Cow<'a, str>, Option<NameAndType<'a>>),
     Synthetic,
     Signature(Cow<'a, str>),
     SourceFile(Cow<'a, str>),
@@ -285,7 +286,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
         let data = match name.deref() {
             "ConstantValue" => {
                 ensure_length(length, 2).map_err(|e| format!("{} ConstantValue attribute {}", e, i))?;
-                AttributeData::ConstantValue(read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::CONSTANTS).map_err(|e| format!("{} value field of ConstantValue attribute {}", e, i))?)
+                AttributeData::ConstantValue(read_cp_literalconstant(bytes, ix, pool).map_err(|e| format!("{} value field of ConstantValue attribute {}", e, i))?)
             }
             "Code" => {
                 let code_data = read_code_data(bytes, ix, pool).map_err(|e| format!("{} of Code attribute {}", e, i))?;
@@ -302,7 +303,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "EnclosingMethod" => {
                 ensure_length(length, 4).map_err(|e| format!("{} EnclosingMethod attribute {}", e, i))?;
                 let class = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
-                let method = read_cp_ref(bytes, ix, pool, ConstantPoolEntryTypes::NAME_AND_TYPE_OR_ZERO).map_err(|e| format!("{} method info of EnclosingMethod attribute {}", e, i))?;
+                let method = read_cp_nameandtype_opt(bytes, ix, pool).map_err(|e| format!("{} method info of EnclosingMethod attribute {}", e, i))?;
                 AttributeData::EnclosingMethod(class, method)
             }
             "Synthetic" => {

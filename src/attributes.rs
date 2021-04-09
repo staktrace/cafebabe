@@ -23,6 +23,28 @@ pub struct CodeData<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
+#[derive(Debug)]
+pub enum VerificationType<'a> {
+    Top,
+    Integer,
+    Float,
+    Long,
+    Double,
+    Null,
+    UninitializedThis,
+    Uninitialized(u16),
+    Object(Cow<'a, str>),
+}
+
+#[derive(Debug)]
+pub enum StackMapEntry<'a> {
+    Same(u16),
+    SameLocals1StackItem(u16, VerificationType<'a>),
+    Chop(u16, u16),
+    Append(u16, Vec<VerificationType<'a>>),
+    FullFrame(u16, Vec<VerificationType<'a>>, Vec<VerificationType<'a>>),
+}
+
 bitflags! {
     pub struct InnerClassAccessFlags: u16 {
         const PUBLIC = AccessFlags::PUBLIC.bits();
@@ -94,7 +116,7 @@ pub struct MethodParameterEntry<'a> {
 pub enum AttributeData<'a> {
     ConstantValue(LiteralConstant<'a>),
     Code(CodeData<'a>),
-    // TODO: StackMapTable - this looks complicated and I don't need it right now so skipping for now
+    StackMapTable(Vec<StackMapEntry<'a>>),
     Exceptions(Vec<Cow<'a, str>>),
     InnerClasses(Vec<InnerClassEntry<'a>>),
     EnclosingMethod(Cow<'a, str>, Option<NameAndType<'a>>),
@@ -156,6 +178,81 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
         exception_table,
         attributes: code_attributes,
     })
+}
+
+fn read_stackmaptable_verification<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<VerificationType<'a>, String> {
+    let verification_type = match read_u1(bytes, ix)? {
+        0 => VerificationType::Top,
+        1 => VerificationType::Integer,
+        2 => VerificationType::Float,
+        3 => VerificationType::Double,
+        4 => VerificationType::Long,
+        5 => VerificationType::Null,
+        6 => VerificationType::UninitializedThis,
+        7 => {
+            let name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} object verification type", e))?;
+            VerificationType::Object(name)
+        }
+        8 => {
+            let offset = read_u2(bytes, ix)?;
+            VerificationType::Uninitialized(offset)
+        }
+        v => return Err(format!("Unrecognized verification type {}", v)),
+    };
+    Ok(verification_type)
+}
+
+fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<StackMapEntry<'a>>, String> {
+    let mut stackmapframes = Vec::new();
+    let count = read_u2(bytes, ix)?;
+    for i in 0..count {
+        let entry = match read_u1(bytes, ix)? {
+            v @ 0..=63 => StackMapEntry::Same(v.into()),
+            v @ 64..=127 => {
+                let verification = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame stack map entry {}", e, i))?;
+                StackMapEntry::SameLocals1StackItem((v - 64).into(), verification)
+            }
+            v @ 128..=246 => return Err(format!("Unrecognized discriminant {} for stack map entry {}", v, i)),
+            247 => {
+                let offset_delta = read_u2(bytes, ix)?;
+                let verification = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame_extended stack map entry {}", e, i))?;
+                StackMapEntry::SameLocals1StackItem(offset_delta, verification)
+            }
+            v @ 248..=250 => {
+                let offset_delta = read_u2(bytes, ix)?;
+                StackMapEntry::Chop(offset_delta, (251 - v).into())
+            }
+            251 => {
+                let offset_delta = read_u2(bytes, ix)?;
+                StackMapEntry::Same(offset_delta)
+            }
+            v @ 252..=254 => {
+                let offset_delta = read_u2(bytes, ix)?;
+                let mut verifications = Vec::new();
+                let verification_count = v - 251;
+                for j in 0..verification_count {
+                    verifications.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of append stack map entry {}", e, j, i))?);
+                }
+                StackMapEntry::Append(offset_delta, verifications)
+            }
+            255 => {
+                let offset_delta = read_u2(bytes, ix)?;
+                let mut locals = Vec::new();
+                let locals_count = read_u2(bytes, ix)?;
+                for j in 0..locals_count {
+                    locals.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of full-frame stack map entry {}", e, j, i))?);
+                }
+                let mut stack = Vec::new();
+                let stack_count = read_u2(bytes, ix)?;
+                for j in 0..stack_count {
+                    stack.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for stack entry {} of full-frame stack map entry {}", e, j, i))?);
+                }
+                StackMapEntry::FullFrame(offset_delta, locals, stack)
+            }
+        };
+        stackmapframes.push(entry);
+    }
+    Ok(stackmapframes)
 }
 
 fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
@@ -291,6 +388,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "Code" => {
                 let code_data = read_code_data(bytes, ix, pool).map_err(|e| format!("{} of Code attribute {}", e, i))?;
                 AttributeData::Code(code_data)
+            }
+            "StackMapTable" => {
+                let stackmaptable_data = read_stackmaptable_data(bytes, ix, pool).map_err(|e| format!("{} of StackMapTable attribute {}", e, i))?;
+                AttributeData::StackMapTable(stackmaptable_data)
             }
             "Exceptions" => {
                 let exceptions_data = read_exceptions_data(bytes, ix, pool).map_err(|e| format!("{} of Exceptions attribute {}", e, i))?;

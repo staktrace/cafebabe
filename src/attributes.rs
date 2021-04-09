@@ -4,7 +4,9 @@ use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags};
 use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, MethodHandle, BootstrapArgument};
-use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt, read_cp_literalconstant, read_cp_methodhandle, read_cp_bootstrap_argument};
+use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
+    read_cp_literalconstant, read_cp_integer, read_cp_float, read_cp_long, read_cp_double, read_cp_methodhandle,
+    read_cp_bootstrap_argument};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -93,6 +95,40 @@ pub struct LocalVariableTypeEntry<'a> {
 }
 
 #[derive(Debug)]
+pub enum AnnotationElementValue<'a> {
+    ByteConstant(i32),
+    CharConstant(i32),
+    DoubleConstant(f64),
+    FloatConstant(f32),
+    IntConstant(i32),
+    LongConstant(i64),
+    ShortConstant(i32),
+    BooleanConstant(i32),
+    StringConstant(Cow<'a, str>),
+    EnumConstant(Cow<'a, str>, Cow<'a, str>),
+    ClassLiteral(Cow<'a, str>),
+    AnnotationValue(Annotation<'a>),
+    ArrayValue(Vec<AnnotationElementValue<'a>>),
+}
+
+#[derive(Debug)]
+pub struct AnnotationElement<'a> {
+    pub name: Cow<'a, str>,
+    pub value: AnnotationElementValue<'a>,
+}
+
+#[derive(Debug)]
+pub struct Annotation<'a> {
+    pub type_descriptor: Cow<'a, str>,
+    pub elements: Vec<AnnotationElement<'a>>,
+}
+
+#[derive(Debug)]
+pub struct ParameterAnnotation<'a> {
+    pub annotations: Vec<Annotation<'a>>,
+}
+
+#[derive(Debug)]
 pub struct BootstrapMethodEntry<'a> {
     pub method: MethodHandle<'a>,
     pub arguments: Vec<BootstrapArgument<'a>>,
@@ -128,6 +164,10 @@ pub enum AttributeData<'a> {
     LocalVariableTable(Vec<LocalVariableEntry<'a>>),
     LocalVariableTypeTable(Vec<LocalVariableTypeEntry<'a>>),
     Deprecated,
+    RuntimeVisibleAnnotations(Vec<Annotation<'a>>),
+    RuntimeInvisibleAnnotations(Vec<Annotation<'a>>),
+    RuntimeVisibleParameterAnnotations(Vec<ParameterAnnotation<'a>>),
+    RuntimeInvisibleParameterAnnotations(Vec<ParameterAnnotation<'a>>),
     // TODO: all the annotation ones
     BootstrapMethods(Vec<BootstrapMethodEntry<'a>>),
     MethodParameters(Vec<MethodParameterEntry<'a>>),
@@ -337,6 +377,76 @@ fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<C
     Ok(localvariabletypes)
 }
 
+fn read_annotation_element_value<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<AnnotationElementValue<'a>, String> {
+    let value = match read_u1(bytes, ix)? as char {
+        'B' => AnnotationElementValue::ByteConstant(read_cp_integer(bytes, ix, pool)?),
+        'C' => AnnotationElementValue::CharConstant(read_cp_integer(bytes, ix, pool)?),
+        'D' => AnnotationElementValue::DoubleConstant(read_cp_double(bytes, ix, pool)?),
+        'F' => AnnotationElementValue::FloatConstant(read_cp_float(bytes, ix, pool)?),
+        'I' => AnnotationElementValue::IntConstant(read_cp_integer(bytes, ix, pool)?),
+        'J' => AnnotationElementValue::LongConstant(read_cp_long(bytes, ix, pool)?),
+        'S' => AnnotationElementValue::ShortConstant(read_cp_integer(bytes, ix, pool)?),
+        'Z' => AnnotationElementValue::BooleanConstant(read_cp_integer(bytes, ix, pool)?),
+        's' => AnnotationElementValue::StringConstant(read_cp_utf8(bytes, ix, pool)?),
+        'e' => AnnotationElementValue::EnumConstant(read_cp_utf8(bytes, ix, pool)?, read_cp_utf8(bytes, ix, pool)?),
+        'c' => AnnotationElementValue::ClassLiteral(read_cp_utf8(bytes, ix, pool)?),
+        '@' => AnnotationElementValue::AnnotationValue(read_annotation(bytes, ix, pool)?),
+        '[' => {
+            let count = read_u2(bytes, ix)?;
+            let mut array_values = Vec::with_capacity(count.into());
+            for i in 0..count {
+                array_values.push(read_annotation_element_value(bytes, ix, pool).map_err(|e| format!("{} array index {} for", e, i))?);
+            }
+            AnnotationElementValue::ArrayValue(array_values)
+        }
+        v => return Err(format!("Unrecognized discriminant {} for", v)),
+    };
+    Ok(value)
+}
+
+fn read_annotation<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Annotation<'a>, String> {
+    let type_descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} type descriptor field of", e))?;
+    let element_count = read_u2(bytes, ix)?;
+    let mut elements = Vec::with_capacity(element_count.into());
+    for i in 0..element_count {
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of element {} of", e, i))?;
+        let value = read_annotation_element_value(bytes, ix, pool).map_err(|e| format!("{} value of element {} of", e, i))?;
+        elements.push(AnnotationElement {
+            name,
+            value,
+        });
+    }
+    Ok(Annotation {
+        type_descriptor,
+        elements,
+    })
+}
+
+fn read_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Annotation<'a>>, String> {
+    let count = read_u2(bytes, ix)?;
+    let mut annotations = Vec::with_capacity(count.into());
+    for i in 0..count {
+        annotations.push(read_annotation(bytes, ix, pool).map_err(|e| format!("{} annotation {}", e, i))?);
+    }
+    Ok(annotations)
+}
+
+fn read_parameter_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<ParameterAnnotation<'a>>, String> {
+    let count = read_u2(bytes, ix)?;
+    let mut parameters = Vec::with_capacity(count.into());
+    for i in 0..count {
+        let annotation_count = read_u2(bytes, ix)?;
+        let mut annotations = Vec::with_capacity(annotation_count.into());
+        for j in 0..annotation_count {
+            annotations.push(read_annotation(bytes, ix, pool).map_err(|e| format!("{} annotation {} of parameter {}", e, j, i))?);
+        }
+        parameters.push(ParameterAnnotation {
+            annotations,
+        });
+    }
+    Ok(parameters)
+}
+
 fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<BootstrapMethodEntry<'a>>, String> {
     let count = read_u2(bytes, ix)?;
     let mut bootstrapmethods = Vec::with_capacity(count.into());
@@ -440,6 +550,22 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "Deprecated" => {
                 ensure_length(length, 0).map_err(|e| format!("{} Deprecated attribute {}", e, i))?;
                 AttributeData::Deprecated
+            }
+            "RuntimeVisibleAnnotations" => {
+                let annotation_data = read_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeVisibleAnnotations attribute {}", e, i))?;
+                AttributeData::RuntimeVisibleAnnotations(annotation_data)
+            }
+            "RuntimeInvisibleAnnotations" => {
+                let annotation_data = read_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleAnnotations attribute {}", e, i))?;
+                AttributeData::RuntimeInvisibleAnnotations(annotation_data)
+            }
+            "RuntimeVisibleParameterAnnotations" => {
+                let annotation_data = read_parameter_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeVisibleParameterAnnotations attribute {}", e, i))?;
+                AttributeData::RuntimeVisibleParameterAnnotations(annotation_data)
+            }
+            "RuntimeInvisibleParameterAnnotations" => {
+                let annotation_data = read_parameter_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleParameterAnnotations attribute {}", e, i))?;
+                AttributeData::RuntimeInvisibleParameterAnnotations(annotation_data)
             }
             "BootstrapMethods" => {
                 let bootstrapmethods_data = read_bootstrapmethods_data(bytes, ix, pool).map_err(|e| format!("{} of BootstrapMethods attribute {}", e, i))?;

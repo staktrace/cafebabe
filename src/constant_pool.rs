@@ -457,6 +457,38 @@ pub(crate) fn read_cp_literalconstant<'a>(bytes: &'a [u8], ix: &mut usize, pool:
     }
 }
 
+pub(crate) fn read_cp_integer<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<i32, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Integer(v) => Ok(*v),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+pub(crate) fn read_cp_float<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<f32, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Float(v) => Ok(*v),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+pub(crate) fn read_cp_long<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<i64, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Long(v) => Ok(*v),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+pub(crate) fn read_cp_double<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<f64, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::Double(v) => Ok(*v),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum MemberKind {
     Field,

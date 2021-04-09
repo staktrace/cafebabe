@@ -71,8 +71,8 @@ pub(crate) enum BootstrapMethodRef {
 }
 
 fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
-    let mut interfaces = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut interfaces = Vec::with_capacity(count.into());
     for i in 0..count {
         interfaces.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} interface {}", e, i))?);
     }
@@ -126,8 +126,8 @@ pub struct FieldInfo<'a> {
 }
 
 fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, String> {
-    let mut fields = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut fields = Vec::with_capacity(count.into());
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on field")?;
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of class field {}", e, i))?;
@@ -169,8 +169,8 @@ pub struct MethodInfo<'a> {
 }
 
 fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodInfo<'a>>, String> {
-    let mut methods = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut methods = Vec::with_capacity(count.into());
     for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on method")?;
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of class method {}", e, i))?;
@@ -220,8 +220,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     }
     let major_version = read_u2(raw_bytes, &mut ix)?;
     let minor_version = read_u2(raw_bytes, &mut ix)?;
-    let constant_pool_count = read_u2(raw_bytes, &mut ix)?;
-    let constant_pool = read_constant_pool(raw_bytes, &mut ix, constant_pool_count, major_version)?;
+    let constant_pool = read_constant_pool(raw_bytes, &mut ix, major_version)?;
 
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
     let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?;

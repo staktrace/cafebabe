@@ -342,11 +342,12 @@ fn validate_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>], major
     Ok(())
 }
 
-pub(crate) fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, constant_pool_count: u16, major_version: u16) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
-    let mut constant_pool = Vec::new();
+pub(crate) fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, major_version: u16) -> Result<Vec<Rc<ConstantPoolEntry<'a>>>, String> {
+    let count = read_u2(bytes, ix)?;
+    let mut constant_pool = Vec::with_capacity(count.into());
     constant_pool.push(Rc::new(ConstantPoolEntry::Zero));
     let mut cp_ix = 1;
-    while cp_ix < constant_pool_count {
+    while cp_ix < count {
         let constant_type = read_u1(bytes, ix)?;
         constant_pool.push(Rc::new(match constant_type {
             1 => read_constant_utf8(bytes, ix)?,

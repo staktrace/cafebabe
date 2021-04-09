@@ -157,7 +157,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
     let code = &bytes[*ix .. *ix + code_length];
     *ix += code_length;
     let exception_table_count = read_u2(bytes, ix)?;
-    let mut exception_table = Vec::new();
+    let mut exception_table = Vec::with_capacity(exception_table_count.into());
     for i in 0..exception_table_count {
         let start_pc = read_u2(bytes, ix)?;
         let end_pc = read_u2(bytes, ix)?;
@@ -203,8 +203,8 @@ fn read_stackmaptable_verification<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[
 }
 
 fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<StackMapEntry<'a>>, String> {
-    let mut stackmapframes = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut stackmapframes = Vec::with_capacity(count.into());
     for i in 0..count {
         let entry = match read_u1(bytes, ix)? {
             v @ 0..=63 => StackMapEntry::Same(v.into()),
@@ -228,8 +228,8 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
             }
             v @ 252..=254 => {
                 let offset_delta = read_u2(bytes, ix)?;
-                let mut verifications = Vec::new();
                 let verification_count = v - 251;
+                let mut verifications = Vec::with_capacity(verification_count.into());
                 for j in 0..verification_count {
                     verifications.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of append stack map entry {}", e, j, i))?);
                 }
@@ -237,13 +237,13 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
             }
             255 => {
                 let offset_delta = read_u2(bytes, ix)?;
-                let mut locals = Vec::new();
                 let locals_count = read_u2(bytes, ix)?;
+                let mut locals = Vec::with_capacity(locals_count.into());
                 for j in 0..locals_count {
                     locals.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of full-frame stack map entry {}", e, j, i))?);
                 }
-                let mut stack = Vec::new();
                 let stack_count = read_u2(bytes, ix)?;
+                let mut stack = Vec::with_capacity(stack_count.into());
                 for j in 0..stack_count {
                     stack.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for stack entry {} of full-frame stack map entry {}", e, j, i))?);
                 }
@@ -256,9 +256,9 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
 }
 
 fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
-    let mut exceptions = Vec::new();
-    let exceptions_count = read_u2(bytes, ix)?;
-    for i in 0..exceptions_count {
+    let count = read_u2(bytes, ix)?;
+    let mut exceptions = Vec::with_capacity(count.into());
+    for i in 0..count {
         let exception = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} exception {}", e, i))?;
         exceptions.push(exception);
     }
@@ -266,8 +266,8 @@ fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Constant
 }
 
 fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<InnerClassEntry<'a>>, String> {
-    let mut innerclasses = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut innerclasses = Vec::with_capacity(count.into());
     for i in 0..count {
         let inner_class_info = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} inner class info for inner class {}", e, i))?;
         let outer_class_info = read_cp_classinfo_opt(bytes, ix, pool).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
@@ -284,8 +284,8 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
 }
 
 fn read_linenumber_data<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Vec<LineNumberEntry>, String> {
-    let mut linenumbers = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut linenumbers = Vec::with_capacity(count.into());
     for _i in 0..count {
         let start_pc = read_u2(bytes, ix)?;
         let line_number = read_u2(bytes, ix)?;
@@ -298,8 +298,8 @@ fn read_linenumber_data<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Vec<LineN
 }
 
 fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableEntry<'a>>, String> {
-    let mut localvariables = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut localvariables = Vec::with_capacity(count.into());
     for i in 0..count {
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
@@ -318,8 +318,8 @@ fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
 }
 
 fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableTypeEntry<'a>>, String> {
-    let mut localvariabletypes = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut localvariabletypes = Vec::with_capacity(count.into());
     for i in 0..count {
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
@@ -338,12 +338,12 @@ fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<C
 }
 
 fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<BootstrapMethodEntry<'a>>, String> {
-    let mut bootstrapmethods = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut bootstrapmethods = Vec::with_capacity(count.into());
     for i in 0..count {
         let method = read_cp_methodhandle(bytes, ix, pool).map_err(|e| format!("{} method ref for bootstrap method {}", e, i))?;
-        let mut arguments = Vec::new();
         let arg_count = read_u2(bytes, ix)?;
+        let mut arguments = Vec::with_capacity(arg_count.into());
         for j in 0..arg_count {
             let argument = read_cp_bootstrap_argument(bytes, ix, pool).map_err(|e| format!("{} argument {} of bootstrap method {}", e, j, i))?;
             arguments.push(argument);
@@ -357,8 +357,8 @@ fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
 }
 
 fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodParameterEntry<'a>>, String> {
-    let mut methodparameters = Vec::new();
     let count = read_u1(bytes, ix)?;
+    let mut methodparameters = Vec::with_capacity(count.into());
     for i in 0..count {
         let name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} name of method parameter {}", e, i))?;
         let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on method parameter {}", i))?;
@@ -371,8 +371,8 @@ fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
 }
 
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
-    let mut attributes = Vec::new();
     let count = read_u2(bytes, ix)?;
+    let mut attributes = Vec::with_capacity(count.into());
     for i in 0..count {
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name field of attribute {}", e, i))?;
         let length = read_u4(bytes, ix)? as usize;

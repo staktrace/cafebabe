@@ -212,7 +212,7 @@ pub enum AttributeData<'a> {
     RuntimeInvisibleParameterAnnotations(Vec<ParameterAnnotation<'a>>),
     RuntimeVisibleTypeAnnotations(Vec<TypeAnnotation<'a>>),
     RuntimeInvisibleTypeAnnotations(Vec<TypeAnnotation<'a>>),
-    AnnotationDefault, // TODO
+    AnnotationDefault(AnnotationElementValue<'a>),
     BootstrapMethods(Vec<BootstrapMethodEntry<'a>>),
     MethodParameters(Vec<MethodParameterEntry<'a>>),
     Other(&'a [u8]),
@@ -675,6 +675,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "RuntimeInvisibleTypeAnnotations" => {
                 let annotation_data = read_type_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleTypeAnnotations attribute {}", e, i))?;
                 AttributeData::RuntimeInvisibleTypeAnnotations(annotation_data)
+            }
+            "AnnotationDefault" => {
+                let element_value = read_annotation_element_value(bytes, ix, pool).map_err(|e| format!("{} of AnnotationDefault attribute {}", e, i))?;
+                AttributeData::AnnotationDefault(element_value)
             }
             "BootstrapMethods" => {
                 let bootstrapmethods_data = read_bootstrapmethods_data(bytes, ix, pool).map_err(|e| format!("{} of BootstrapMethods attribute {}", e, i))?;

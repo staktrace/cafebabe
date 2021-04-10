@@ -476,7 +476,7 @@ fn read_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Constant
 }
 
 fn read_parameter_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<ParameterAnnotation<'a>>, String> {
-    let count = read_u2(bytes, ix)?;
+    let count = read_u1(bytes, ix)?;
     let mut parameters = Vec::with_capacity(count.into());
     for i in 0..count {
         let annotation_count = read_u2(bytes, ix)?;

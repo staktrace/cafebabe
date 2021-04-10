@@ -129,28 +129,28 @@ pub struct ParameterAnnotation<'a> {
 }
 
 #[derive(Debug)]
-pub struct LocalVarTargetEntry {
+pub struct TypeAnnotationLocalVarTargetEntry {
     pub start_pc: u16,
     pub length: u16,
     pub index: u16,
 }
 
 #[derive(Debug)]
-pub enum TargetType {
+pub enum TypeAnnotationTarget {
     TypeParameter(u8),
     Supertype(u16),
     TypeParameterBound(u8, u8),
     Empty,
     FormalParameter(u8),
     Throws(u16),
-    LocalVar(Vec<LocalVarTargetEntry>),
+    LocalVar(Vec<TypeAnnotationLocalVarTargetEntry>),
     Catch(u16),
     Offset(u16),
     TypeArgument(u16, u8),
 }
 
 #[derive(Debug)]
-pub enum TypePathKind {
+pub enum TypeAnnotationTargetPathKind {
     DeeperArray,
     DeeperNested,
     WildcardTypeArgument,
@@ -158,15 +158,15 @@ pub enum TypePathKind {
 }
 
 #[derive(Debug)]
-pub struct TargetPathEntry {
-    pub path_kind: TypePathKind,
+pub struct TypeAnnotationTargetPathEntry {
+    pub path_kind: TypeAnnotationTargetPathKind,
     pub argument_index: u8,
 }
 
 #[derive(Debug)]
 pub struct TypeAnnotation<'a> {
-    pub target_type: TargetType,
-    pub target_path: Vec<TargetPathEntry>,
+    pub target_type: TypeAnnotationTarget,
+    pub target_path: Vec<TypeAnnotationTargetPathEntry>,
     pub annotation: Annotation<'a>,
 }
 
@@ -496,12 +496,12 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
     let mut annotations = Vec::with_capacity(count.into());
     for i in 0..count {
         let target_type = match read_u1(bytes, ix)? {
-            0x00 | 0x01 => TargetType::TypeParameter(read_u1(bytes, ix)?),
-            0x10 => TargetType::Supertype(read_u2(bytes, ix)?),
-            0x11 | 0x12 => TargetType::TypeParameterBound(read_u1(bytes, ix)?, read_u1(bytes, ix)?),
-            0x13 | 0x14 | 0x15 => TargetType::Empty,
-            0x16 => TargetType::FormalParameter(read_u1(bytes, ix)?),
-            0x17 => TargetType::Throws(read_u2(bytes, ix)?),
+            0x00 | 0x01 => TypeAnnotationTarget::TypeParameter(read_u1(bytes, ix)?),
+            0x10 => TypeAnnotationTarget::Supertype(read_u2(bytes, ix)?),
+            0x11 | 0x12 => TypeAnnotationTarget::TypeParameterBound(read_u1(bytes, ix)?, read_u1(bytes, ix)?),
+            0x13 | 0x14 | 0x15 => TypeAnnotationTarget::Empty,
+            0x16 => TypeAnnotationTarget::FormalParameter(read_u1(bytes, ix)?),
+            0x17 => TypeAnnotationTarget::Throws(read_u2(bytes, ix)?),
             0x40 | 0x41 => {
                 let localvar_count = read_u2(bytes, ix)?;
                 let mut localvars = Vec::with_capacity(localvar_count.into());
@@ -509,31 +509,31 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
                     let start_pc = read_u2(bytes, ix)?;
                     let length = read_u2(bytes, ix)?;
                     let index = read_u2(bytes, ix)?;
-                    localvars.push(LocalVarTargetEntry {
+                    localvars.push(TypeAnnotationLocalVarTargetEntry {
                         start_pc,
                         length,
                         index,
                     });
                 }
-                TargetType::LocalVar(localvars)
+                TypeAnnotationTarget::LocalVar(localvars)
             }
-            0x42 => TargetType::Catch(read_u2(bytes, ix)?),
-            0x43 | 0x44 | 0x45 | 0x46 => TargetType::Offset(read_u2(bytes, ix)?),
-            0x47 | 0x48 | 0x49 | 0x4A | 0x4B => TargetType::TypeArgument(read_u2(bytes, ix)?, read_u1(bytes, ix)?),
+            0x42 => TypeAnnotationTarget::Catch(read_u2(bytes, ix)?),
+            0x43 | 0x44 | 0x45 | 0x46 => TypeAnnotationTarget::Offset(read_u2(bytes, ix)?),
+            0x47 | 0x48 | 0x49 | 0x4A | 0x4B => TypeAnnotationTarget::TypeArgument(read_u2(bytes, ix)?, read_u1(bytes, ix)?),
             v => return Err(format!("Unrecognized target type {} in type annotation {}", v, i)),
         };
         let path_count = read_u1(bytes, ix)?;
         let mut target_path = Vec::with_capacity(path_count.into());
         for j in 0..path_count {
             let path_kind = match read_u1(bytes, ix)? {
-                0 => TypePathKind::DeeperArray,
-                1 => TypePathKind::DeeperNested,
-                2 => TypePathKind::WildcardTypeArgument,
-                3 => TypePathKind::TypeArgument,
+                0 => TypeAnnotationTargetPathKind::DeeperArray,
+                1 => TypeAnnotationTargetPathKind::DeeperNested,
+                2 => TypeAnnotationTargetPathKind::WildcardTypeArgument,
+                3 => TypeAnnotationTargetPathKind::TypeArgument,
                 v => return Err(format!("Unrecognized path kind {} in path element {} of type annotation {}", v, j, i)),
             };
             let argument_index = read_u1(bytes, ix)?;
-            target_path.push(TargetPathEntry {
+            target_path.push(TypeAnnotationTargetPathEntry {
                 path_kind,
                 argument_index,
             });

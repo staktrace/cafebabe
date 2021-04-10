@@ -129,6 +129,48 @@ pub struct ParameterAnnotation<'a> {
 }
 
 #[derive(Debug)]
+pub struct LocalVarTargetEntry {
+    pub start_pc: u16,
+    pub length: u16,
+    pub index: u16,
+}
+
+#[derive(Debug)]
+pub enum TargetType {
+    TypeParameter(u8),
+    Supertype(u16),
+    TypeParameterBound(u8, u8),
+    Empty,
+    FormalParameter(u8),
+    Throws(u16),
+    LocalVar(Vec<LocalVarTargetEntry>),
+    Catch(u16),
+    Offset(u16),
+    TypeArgument(u16, u8),
+}
+
+#[derive(Debug)]
+pub enum TypePathKind {
+    DeeperArray,
+    DeeperNested,
+    WildcardTypeArgument,
+    TypeArgument,
+}
+
+#[derive(Debug)]
+pub struct TargetPathEntry {
+    pub path_kind: TypePathKind,
+    pub argument_index: u8,
+}
+
+#[derive(Debug)]
+pub struct TypeAnnotation<'a> {
+    pub target_type: TargetType,
+    pub target_path: Vec<TargetPathEntry>,
+    pub annotation: Annotation<'a>,
+}
+
+#[derive(Debug)]
 pub struct BootstrapMethodEntry<'a> {
     pub method: MethodHandle<'a>,
     pub arguments: Vec<BootstrapArgument<'a>>,
@@ -168,7 +210,9 @@ pub enum AttributeData<'a> {
     RuntimeInvisibleAnnotations(Vec<Annotation<'a>>),
     RuntimeVisibleParameterAnnotations(Vec<ParameterAnnotation<'a>>),
     RuntimeInvisibleParameterAnnotations(Vec<ParameterAnnotation<'a>>),
-    // TODO: all the annotation ones
+    RuntimeVisibleTypeAnnotations(Vec<TypeAnnotation<'a>>),
+    RuntimeInvisibleTypeAnnotations(Vec<TypeAnnotation<'a>>),
+    AnnotationDefault, // TODO
     BootstrapMethods(Vec<BootstrapMethodEntry<'a>>),
     MethodParameters(Vec<MethodParameterEntry<'a>>),
     Other(&'a [u8]),
@@ -447,6 +491,63 @@ fn read_parameter_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[R
     Ok(parameters)
 }
 
+fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<TypeAnnotation<'a>>, String> {
+    let count = read_u2(bytes, ix)?;
+    let mut annotations = Vec::with_capacity(count.into());
+    for i in 0..count {
+        let target_type = match read_u1(bytes, ix)? {
+            0x00 | 0x01 => TargetType::TypeParameter(read_u1(bytes, ix)?),
+            0x10 => TargetType::Supertype(read_u2(bytes, ix)?),
+            0x11 | 0x12 => TargetType::TypeParameterBound(read_u1(bytes, ix)?, read_u1(bytes, ix)?),
+            0x13 | 0x14 | 0x15 => TargetType::Empty,
+            0x16 => TargetType::FormalParameter(read_u1(bytes, ix)?),
+            0x17 => TargetType::Throws(read_u2(bytes, ix)?),
+            0x40 | 0x41 => {
+                let localvar_count = read_u2(bytes, ix)?;
+                let mut localvars = Vec::with_capacity(localvar_count.into());
+                for _j in 0..localvar_count {
+                    let start_pc = read_u2(bytes, ix)?;
+                    let length = read_u2(bytes, ix)?;
+                    let index = read_u2(bytes, ix)?;
+                    localvars.push(LocalVarTargetEntry {
+                        start_pc,
+                        length,
+                        index,
+                    });
+                }
+                TargetType::LocalVar(localvars)
+            }
+            0x42 => TargetType::Catch(read_u2(bytes, ix)?),
+            0x43 | 0x44 | 0x45 | 0x46 => TargetType::Offset(read_u2(bytes, ix)?),
+            0x47 | 0x48 | 0x49 | 0x4A | 0x4B => TargetType::TypeArgument(read_u2(bytes, ix)?, read_u1(bytes, ix)?),
+            v => return Err(format!("Unrecognized target type {} in type annotation {}", v, i)),
+        };
+        let path_count = read_u1(bytes, ix)?;
+        let mut target_path = Vec::with_capacity(path_count.into());
+        for j in 0..path_count {
+            let path_kind = match read_u1(bytes, ix)? {
+                0 => TypePathKind::DeeperArray,
+                1 => TypePathKind::DeeperNested,
+                2 => TypePathKind::WildcardTypeArgument,
+                3 => TypePathKind::TypeArgument,
+                v => return Err(format!("Unrecognized path kind {} in path element {} of type annotation {}", v, j, i)),
+            };
+            let argument_index = read_u1(bytes, ix)?;
+            target_path.push(TargetPathEntry {
+                path_kind,
+                argument_index,
+            });
+        }
+        let annotation = read_annotation(bytes, ix, pool).map_err(|e| format!("{} of type annotation {}", e, i))?;
+        annotations.push(TypeAnnotation {
+            target_type,
+            target_path,
+            annotation,
+        });
+    }
+    Ok(annotations)
+}
+
 fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<BootstrapMethodEntry<'a>>, String> {
     let count = read_u2(bytes, ix)?;
     let mut bootstrapmethods = Vec::with_capacity(count.into());
@@ -566,6 +667,14 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "RuntimeInvisibleParameterAnnotations" => {
                 let annotation_data = read_parameter_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleParameterAnnotations attribute {}", e, i))?;
                 AttributeData::RuntimeInvisibleParameterAnnotations(annotation_data)
+            }
+            "RuntimeVisibleTypeAnnotations" => {
+                let annotation_data = read_type_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeVisibleTypeAnnotations attribute {}", e, i))?;
+                AttributeData::RuntimeVisibleTypeAnnotations(annotation_data)
+            }
+            "RuntimeInvisibleTypeAnnotations" => {
+                let annotation_data = read_type_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleTypeAnnotations attribute {}", e, i))?;
+                AttributeData::RuntimeInvisibleTypeAnnotations(annotation_data)
             }
             "BootstrapMethods" => {
                 let bootstrapmethods_data = read_bootstrapmethods_data(bytes, ix, pool).map_err(|e| format!("{} of BootstrapMethods attribute {}", e, i))?;

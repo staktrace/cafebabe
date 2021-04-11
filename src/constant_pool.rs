@@ -372,11 +372,11 @@ pub(crate) fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, major_vers
             10 => read_constant_methodref(bytes, ix)?,
             11 => read_constant_interfacemethodref(bytes, ix)?,
             12 => read_constant_nameandtype(bytes, ix)?,
-            15 => read_constant_methodhandle(bytes, ix)?,
-            16 => read_constant_methodtype(bytes, ix)?,
-            18 => read_constant_invokedynamic(bytes, ix)?,
-            19 => read_constant_module(bytes, ix)?,
-            n => return Err(format!("Unexpected constant pool entry type {} at index {}", n, *ix - 1)),
+            15 if major_version >= 51 => read_constant_methodhandle(bytes, ix)?,
+            16 if major_version >= 51 => read_constant_methodtype(bytes, ix)?,
+            18 if major_version >= 51 => read_constant_invokedynamic(bytes, ix)?,
+            19 if major_version >= 53 => read_constant_module(bytes, ix)?,
+            n => return Err(format!("Unexpected constant pool entry type {} at index {} for classfile major version {}", n, *ix - 1, major_version)),
         }));
         cp_ix += 1;
         if constant_type == 5 || constant_type == 6 {

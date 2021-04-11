@@ -34,17 +34,17 @@ pub enum VerificationType<'a> {
     Double,
     Null,
     UninitializedThis,
-    Uninitialized(u16),
-    Object(Cow<'a, str>),
+    Uninitialized { code_offset: u16 },
+    Object { class_name: Cow<'a, str> },
 }
 
 #[derive(Debug)]
 pub enum StackMapEntry<'a> {
-    Same(u16),
-    SameLocals1StackItem(u16, VerificationType<'a>),
-    Chop(u16, u16),
-    Append(u16, Vec<VerificationType<'a>>),
-    FullFrame(u16, Vec<VerificationType<'a>>, Vec<VerificationType<'a>>),
+    Same { offset_delta: u16 },
+    SameLocals1StackItem { offset_delta: u16, stack: VerificationType<'a> },
+    Chop { offset_delta: u16, chop_count: u16 },
+    Append { offset_delta: u16, locals: Vec<VerificationType<'a>> },
+    FullFrame { offset_delta: u16, locals: Vec<VerificationType<'a>>, stack: Vec<VerificationType<'a>> },
 }
 
 bitflags! {
@@ -105,8 +105,8 @@ pub enum AnnotationElementValue<'a> {
     ShortConstant(i32),
     BooleanConstant(i32),
     StringConstant(Cow<'a, str>),
-    EnumConstant(Cow<'a, str>, Cow<'a, str>),
-    ClassLiteral(Cow<'a, str>),
+    EnumConstant { type_name: Cow<'a, str>, const_name: Cow<'a, str> },
+    ClassLiteral { class_name: Cow<'a, str> },
     AnnotationValue(Annotation<'a>),
     ArrayValue(Vec<AnnotationElementValue<'a>>),
 }
@@ -137,16 +137,16 @@ pub struct TypeAnnotationLocalVarTargetEntry {
 
 #[derive(Debug)]
 pub enum TypeAnnotationTarget {
-    TypeParameter(u8),
-    Supertype(u16),
-    TypeParameterBound(u8, u8),
+    TypeParameter { index: u8 },
+    Supertype { index: u16 },
+    TypeParameterBound { type_parameter_index: u8, bound_index: u8 },
     Empty,
-    FormalParameter(u8),
-    Throws(u16),
+    FormalParameter { index: u8 },
+    Throws { index: u16 },
     LocalVar(Vec<TypeAnnotationLocalVarTargetEntry>),
-    Catch(u16),
-    Offset(u16),
-    TypeArgument(u16, u8),
+    Catch { exception_table_index: u16 },
+    Offset { offset: u16 },
+    TypeArgument { offset: u16, type_argument_index: u8 },
 }
 
 #[derive(Debug)]
@@ -197,7 +197,7 @@ pub enum AttributeData<'a> {
     StackMapTable(Vec<StackMapEntry<'a>>),
     Exceptions(Vec<Cow<'a, str>>),
     InnerClasses(Vec<InnerClassEntry<'a>>),
-    EnclosingMethod(Cow<'a, str>, Option<NameAndType<'a>>),
+    EnclosingMethod { class_name: Cow<'a, str>, method: Option<NameAndType<'a>> },
     Synthetic,
     Signature(Cow<'a, str>),
     SourceFile(Cow<'a, str>),
@@ -274,12 +274,12 @@ fn read_stackmaptable_verification<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[
         5 => VerificationType::Null,
         6 => VerificationType::UninitializedThis,
         7 => {
-            let name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} object verification type", e))?;
-            VerificationType::Object(name)
+            let class_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} object verification type", e))?;
+            VerificationType::Object { class_name }
         }
         8 => {
-            let offset = read_u2(bytes, ix)?;
-            VerificationType::Uninitialized(offset)
+            let code_offset = read_u2(bytes, ix)?;
+            VerificationType::Uninitialized { code_offset }
         }
         v => return Err(format!("Unrecognized verification type {}", v)),
     };
@@ -291,33 +291,33 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     let mut stackmapframes = Vec::with_capacity(count.into());
     for i in 0..count {
         let entry = match read_u1(bytes, ix)? {
-            v @ 0..=63 => StackMapEntry::Same(v.into()),
+            v @ 0..=63 => StackMapEntry::Same { offset_delta: v.into() },
             v @ 64..=127 => {
-                let verification = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame stack map entry {}", e, i))?;
-                StackMapEntry::SameLocals1StackItem((v - 64).into(), verification)
+                let stack = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame stack map entry {}", e, i))?;
+                StackMapEntry::SameLocals1StackItem { offset_delta: (v - 64).into(), stack }
             }
             v @ 128..=246 => return Err(format!("Unrecognized discriminant {} for stack map entry {}", v, i)),
             247 => {
                 let offset_delta = read_u2(bytes, ix)?;
-                let verification = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame_extended stack map entry {}", e, i))?;
-                StackMapEntry::SameLocals1StackItem(offset_delta, verification)
+                let stack = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame_extended stack map entry {}", e, i))?;
+                StackMapEntry::SameLocals1StackItem { offset_delta, stack }
             }
             v @ 248..=250 => {
                 let offset_delta = read_u2(bytes, ix)?;
-                StackMapEntry::Chop(offset_delta, (251 - v).into())
+                StackMapEntry::Chop { offset_delta, chop_count: (251 - v).into() }
             }
             251 => {
                 let offset_delta = read_u2(bytes, ix)?;
-                StackMapEntry::Same(offset_delta)
+                StackMapEntry::Same { offset_delta }
             }
             v @ 252..=254 => {
                 let offset_delta = read_u2(bytes, ix)?;
                 let verification_count = v - 251;
-                let mut verifications = Vec::with_capacity(verification_count.into());
+                let mut locals = Vec::with_capacity(verification_count.into());
                 for j in 0..verification_count {
-                    verifications.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of append stack map entry {}", e, j, i))?);
+                    locals.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of append stack map entry {}", e, j, i))?);
                 }
-                StackMapEntry::Append(offset_delta, verifications)
+                StackMapEntry::Append { offset_delta, locals }
             }
             255 => {
                 let offset_delta = read_u2(bytes, ix)?;
@@ -331,7 +331,7 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
                 for j in 0..stack_count {
                     stack.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for stack entry {} of full-frame stack map entry {}", e, j, i))?);
                 }
-                StackMapEntry::FullFrame(offset_delta, locals, stack)
+                StackMapEntry::FullFrame { offset_delta, locals, stack }
             }
         };
         stackmapframes.push(entry);
@@ -432,8 +432,8 @@ fn read_annotation_element_value<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc
         'S' => AnnotationElementValue::ShortConstant(read_cp_integer(bytes, ix, pool)?),
         'Z' => AnnotationElementValue::BooleanConstant(read_cp_integer(bytes, ix, pool)?),
         's' => AnnotationElementValue::StringConstant(read_cp_utf8(bytes, ix, pool)?),
-        'e' => AnnotationElementValue::EnumConstant(read_cp_utf8(bytes, ix, pool)?, read_cp_utf8(bytes, ix, pool)?),
-        'c' => AnnotationElementValue::ClassLiteral(read_cp_utf8(bytes, ix, pool)?),
+        'e' => AnnotationElementValue::EnumConstant { type_name: read_cp_utf8(bytes, ix, pool)?, const_name: read_cp_utf8(bytes, ix, pool)? },
+        'c' => AnnotationElementValue::ClassLiteral { class_name: read_cp_utf8(bytes, ix, pool)? },
         '@' => AnnotationElementValue::AnnotationValue(read_annotation(bytes, ix, pool)?),
         '[' => {
             let count = read_u2(bytes, ix)?;
@@ -496,12 +496,12 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
     let mut annotations = Vec::with_capacity(count.into());
     for i in 0..count {
         let target_type = match read_u1(bytes, ix)? {
-            0x00 | 0x01 => TypeAnnotationTarget::TypeParameter(read_u1(bytes, ix)?),
-            0x10 => TypeAnnotationTarget::Supertype(read_u2(bytes, ix)?),
-            0x11 | 0x12 => TypeAnnotationTarget::TypeParameterBound(read_u1(bytes, ix)?, read_u1(bytes, ix)?),
+            0x00 | 0x01 => TypeAnnotationTarget::TypeParameter { index: read_u1(bytes, ix)? },
+            0x10 => TypeAnnotationTarget::Supertype { index: read_u2(bytes, ix)? },
+            0x11 | 0x12 => TypeAnnotationTarget::TypeParameterBound { type_parameter_index: read_u1(bytes, ix)?, bound_index: read_u1(bytes, ix)? },
             0x13 | 0x14 | 0x15 => TypeAnnotationTarget::Empty,
-            0x16 => TypeAnnotationTarget::FormalParameter(read_u1(bytes, ix)?),
-            0x17 => TypeAnnotationTarget::Throws(read_u2(bytes, ix)?),
+            0x16 => TypeAnnotationTarget::FormalParameter { index: read_u1(bytes, ix)? },
+            0x17 => TypeAnnotationTarget::Throws { index: read_u2(bytes, ix)? },
             0x40 | 0x41 => {
                 let localvar_count = read_u2(bytes, ix)?;
                 let mut localvars = Vec::with_capacity(localvar_count.into());
@@ -517,9 +517,9 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
                 }
                 TypeAnnotationTarget::LocalVar(localvars)
             }
-            0x42 => TypeAnnotationTarget::Catch(read_u2(bytes, ix)?),
-            0x43 | 0x44 | 0x45 | 0x46 => TypeAnnotationTarget::Offset(read_u2(bytes, ix)?),
-            0x47 | 0x48 | 0x49 | 0x4A | 0x4B => TypeAnnotationTarget::TypeArgument(read_u2(bytes, ix)?, read_u1(bytes, ix)?),
+            0x42 => TypeAnnotationTarget::Catch { exception_table_index: read_u2(bytes, ix)? },
+            0x43 | 0x44 | 0x45 | 0x46 => TypeAnnotationTarget::Offset { offset: read_u2(bytes, ix)? },
+            0x47 | 0x48 | 0x49 | 0x4A | 0x4B => TypeAnnotationTarget::TypeArgument { offset: read_u2(bytes, ix)?, type_argument_index: read_u1(bytes, ix)? },
             v => return Err(format!("Unrecognized target type {} in type annotation {}", v, i)),
         };
         let path_count = read_u1(bytes, ix)?;
@@ -614,9 +614,9 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             }
             "EnclosingMethod" => {
                 ensure_length(length, 4).map_err(|e| format!("{} EnclosingMethod attribute {}", e, i))?;
-                let class = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
+                let class_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
                 let method = read_cp_nameandtype_opt(bytes, ix, pool).map_err(|e| format!("{} method info of EnclosingMethod attribute {}", e, i))?;
-                AttributeData::EnclosingMethod(class, method)
+                AttributeData::EnclosingMethod { class_name, method }
             }
             "Synthetic" => {
                 ensure_length(length, 0).map_err(|e| format!("{} Synthetic attribute {}", e, i))?;

@@ -91,9 +91,11 @@ bitflags! {
         const NAME_AND_TYPE = 0x0800;
         const METHOD_HANDLE = 0x1000;
         const METHOD_TYPE = 0x2000;
-        const INVOKE_DYNAMIC = 0x4000;
-        const MODULE_INFO = 0x8000;
-        const UNUSED = 0x10000;
+        const DYNAMIC = 0x4000;
+        const INVOKE_DYNAMIC = 0x8000;
+        const MODULE_INFO = 0x10000;
+        const PACKAGE_INFO = 0x20000;
+        const UNUSED = 0x40000;
 
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
         const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();
@@ -117,8 +119,10 @@ pub(crate) enum ConstantPoolEntry<'a> {
     NameAndType(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
     MethodHandle(ReferenceKind, RefCell<ConstantPoolRef<'a>>),
     MethodType(RefCell<ConstantPoolRef<'a>>),
+    Dynamic(BootstrapMethodRef, RefCell<ConstantPoolRef<'a>>),
     InvokeDynamic(BootstrapMethodRef, RefCell<ConstantPoolRef<'a>>),
     ModuleInfo(RefCell<ConstantPoolRef<'a>>),
+    PackageInfo(RefCell<ConstantPoolRef<'a>>),
     Unused,
 }
 
@@ -133,8 +137,10 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::NameAndType(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
             ConstantPoolEntry::MethodHandle(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::MethodType(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::Dynamic(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::PackageInfo(x) => x.resolve(my_index, pool),
             _ => Ok(true),
         }
     }
@@ -149,8 +155,10 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::NameAndType(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
             ConstantPoolEntry::MethodHandle(_, y) => y.borrow().is_resolved(),
             ConstantPoolEntry::MethodType(x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::Dynamic(_, y) => y.borrow().is_resolved(),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.borrow().is_resolved(),
             ConstantPoolEntry::ModuleInfo(x) => x.borrow().is_resolved(),
+            ConstantPoolEntry::PackageInfo(x) => x.borrow().is_resolved(),
             _ => true,
         }
     }
@@ -171,8 +179,10 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::NameAndType(_, _) => ConstantPoolEntryTypes::NAME_AND_TYPE,
             ConstantPoolEntry::MethodHandle(_, _) => ConstantPoolEntryTypes::METHOD_HANDLE,
             ConstantPoolEntry::MethodType(_) => ConstantPoolEntryTypes::METHOD_TYPE,
+            ConstantPoolEntry::Dynamic(_, _) => ConstantPoolEntryTypes::DYNAMIC,
             ConstantPoolEntry::InvokeDynamic(_, _) => ConstantPoolEntryTypes::INVOKE_DYNAMIC,
             ConstantPoolEntry::ModuleInfo(_) => ConstantPoolEntryTypes::MODULE_INFO,
+            ConstantPoolEntry::PackageInfo(_) => ConstantPoolEntryTypes::PACKAGE_INFO,
             ConstantPoolEntry::Unused => ConstantPoolEntryTypes::UNUSED,
         }
     }
@@ -197,8 +207,10 @@ impl<'a> ConstantPoolEntry<'a> {
                 ReferenceKind::InvokeInterface => ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
             }),
             ConstantPoolEntry::MethodType(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::Dynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
             ConstantPoolEntry::ModuleInfo(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::PackageInfo(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
             _ => Ok(true),
         }
     }
@@ -318,6 +330,12 @@ fn read_constant_methodtype<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Const
     Ok(ConstantPoolEntry::MethodType(descriptor_ref))
 }
 
+fn read_constant_dynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
+    let bootstrap_method_ref = BootstrapMethodRef::Unresolved(read_u2(bytes, ix)?);
+    let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
+    Ok(ConstantPoolEntry::Dynamic(bootstrap_method_ref, name_and_type_ref))
+}
+
 fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
     let bootstrap_method_ref = BootstrapMethodRef::Unresolved(read_u2(bytes, ix)?);
     let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
@@ -327,6 +345,11 @@ fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Co
 fn read_constant_module<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
     let name_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::ModuleInfo(name_ref))
+}
+
+fn read_constant_package<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
+    let name_ref = read_unresolved_cp_ref(bytes, ix)?;
+    Ok(ConstantPoolEntry::PackageInfo(name_ref))
 }
 
 fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
@@ -374,8 +397,10 @@ pub(crate) fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, major_vers
             12 => read_constant_nameandtype(bytes, ix)?,
             15 if major_version >= 51 => read_constant_methodhandle(bytes, ix)?,
             16 if major_version >= 51 => read_constant_methodtype(bytes, ix)?,
+            17 if major_version >= 55 => read_constant_dynamic(bytes, ix)?,
             18 if major_version >= 51 => read_constant_invokedynamic(bytes, ix)?,
             19 if major_version >= 53 => read_constant_module(bytes, ix)?,
+            20 if major_version >= 53 => read_constant_package(bytes, ix)?,
             n => return Err(format!("Unexpected constant pool entry type {} at index {} for classfile major version {}", n, *ix - 1, major_version)),
         }));
         cp_ix += 1;

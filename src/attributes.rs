@@ -6,7 +6,7 @@ use crate::{read_u1, read_u2, read_u4, AccessFlags};
 use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, MethodHandle, BootstrapArgument};
 use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
     read_cp_literalconstant, read_cp_integer, read_cp_float, read_cp_long, read_cp_double, read_cp_methodhandle,
-    read_cp_bootstrap_argument};
+    read_cp_bootstrap_argument, read_cp_moduleinfo, read_cp_packageinfo};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -190,6 +190,76 @@ pub struct MethodParameterEntry<'a> {
     pub access_flags: MethodParameterAccessFlags,
 }
 
+bitflags! {
+    pub struct ModuleAccessFlags: u16 {
+        const OPEN = AccessFlags::OPEN.bits();
+        const SYNTHETIC = AccessFlags::SYNTHETIC.bits();
+        const MANDATED = AccessFlags::MANDATED.bits();
+    }
+}
+
+bitflags! {
+    pub struct ModuleRequiresFlags: u16 {
+        const TRANSITIVE = AccessFlags::TRANSITIVE.bits();
+        const STATIC_PHASE = AccessFlags::STATIC_PHASE.bits();
+        const SYNTHETIC = AccessFlags::SYNTHETIC.bits();
+        const MANDATED = AccessFlags::MANDATED.bits();
+    }
+}
+
+#[derive(Debug)]
+pub struct ModuleRequireEntry<'a> {
+    pub name: Cow<'a, str>,
+    pub flags: ModuleRequiresFlags,
+    pub version: Option<Cow<'a, str>>,
+}
+
+bitflags! {
+    pub struct ModuleExportsFlags: u16 {
+        const SYNTHETIC = AccessFlags::SYNTHETIC.bits();
+        const MANDATED = AccessFlags::MANDATED.bits();
+    }
+}
+
+#[derive(Debug)]
+pub struct ModuleExportsEntry<'a> {
+    pub package_name: Cow<'a, str>,
+    pub flags: ModuleExportsFlags,
+    pub exports_to: Vec<Cow<'a, str>>,
+}
+
+bitflags! {
+    pub struct ModuleOpensFlags: u16 {
+        const SYNTHETIC = AccessFlags::SYNTHETIC.bits();
+        const MANDATED = AccessFlags::MANDATED.bits();
+    }
+}
+
+#[derive(Debug)]
+pub struct ModuleOpensEntry<'a> {
+    pub package_name: Cow<'a, str>,
+    pub flags: ModuleOpensFlags,
+    pub opens_to: Vec<Cow<'a, str>>,
+}
+
+#[derive(Debug)]
+pub struct ModuleProvidesEntry<'a> {
+    pub service_interface_name: Cow<'a, str>,
+    pub provides_with: Vec<Cow<'a, str>>,
+}
+
+#[derive(Debug)]
+pub struct ModuleData<'a> {
+    pub name: Cow<'a, str>,
+    pub access_flags: ModuleAccessFlags,
+    pub version: Option<Cow<'a, str>>,
+    pub requires: Vec<ModuleRequireEntry<'a>>,
+    pub exports: Vec<ModuleExportsEntry<'a>>,
+    pub opens: Vec<ModuleOpensEntry<'a>>,
+    pub uses: Vec<Cow<'a, str>>,
+    pub provides: Vec<ModuleProvidesEntry<'a>>,
+}
+
 #[derive(Debug)]
 pub enum AttributeData<'a> {
     ConstantValue(LiteralConstant<'a>),
@@ -215,6 +285,7 @@ pub enum AttributeData<'a> {
     AnnotationDefault(AnnotationElementValue<'a>),
     BootstrapMethods(Vec<BootstrapMethodEntry<'a>>),
     MethodParameters(Vec<MethodParameterEntry<'a>>),
+    Module(ModuleData<'a>),
     Other(&'a [u8]),
 }
 
@@ -581,6 +652,82 @@ fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     Ok(methodparameters)
 }
 
+fn read_module_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<ModuleData<'a>, String> {
+    let name = read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name", e))?;
+    let access_flags = ModuleAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found"))?;
+    let version = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} version", e))?;
+    let requires_count = read_u2(bytes, ix)?;
+    let mut requires = Vec::with_capacity(requires_count.into());
+    for i in 0..requires_count {
+        requires.push(ModuleRequireEntry {
+            name: read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name of requires entry {}", e, i))?,
+            flags: ModuleRequiresFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid module requires flags for entry {}", i))?,
+            version: read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} version of requires entry {}", e, i))?,
+        });
+    }
+    let exports_count = read_u2(bytes, ix)?;
+    let mut exports = Vec::with_capacity(exports_count.into());
+    for i in 0..exports_count {
+        let package_name = read_cp_packageinfo(bytes, ix, pool).map_err(|e| format!("{} package name of exports entry {}", e, i))?;
+        let flags = ModuleExportsFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid module exports flags for entry {}", i))?;
+        let exports_to_count = read_u2(bytes, ix)?;
+        let mut exports_to = Vec::with_capacity(exports_to_count.into());
+        for j in 0..exports_to_count {
+            exports_to.push(read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name of exports_to entry {} of exports entry {}", e, j, i))?);
+        }
+        exports.push(ModuleExportsEntry {
+            package_name,
+            flags,
+            exports_to,
+        });
+    }
+    let opens_count = read_u2(bytes, ix)?;
+    let mut opens = Vec::with_capacity(opens_count.into());
+    for i in 0..opens_count {
+        let package_name = read_cp_packageinfo(bytes, ix, pool).map_err(|e| format!("{} package name of opens entry {}", e, i))?;
+        let flags = ModuleOpensFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid module opens flags for entry {}", i))?;
+        let opens_to_count = read_u2(bytes, ix)?;
+        let mut opens_to = Vec::with_capacity(opens_to_count.into());
+        for j in 0..opens_to_count {
+            opens_to.push(read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name of opens_to entry {} of opens entry {}", e, j, i))?);
+        }
+        opens.push(ModuleOpensEntry {
+            package_name,
+            flags,
+            opens_to,
+        });
+    }
+    let uses_count = read_u2(bytes, ix)?;
+    let mut uses = Vec::with_capacity(uses_count.into());
+    for i in 0..uses_count {
+        uses.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} name of uses entry {}", e, i))?);
+    }
+    let provides_count = read_u2(bytes, ix)?;
+    let mut provides = Vec::with_capacity(provides_count.into());
+    for i in 0..provides_count {
+        let service_interface_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} service interface name of provides entry {}", e, i))?;
+        let provides_with_count = read_u2(bytes, ix)?;
+        let mut provides_with = Vec::with_capacity(provides_with_count.into());
+        for j in 0..provides_with_count {
+            provides_with.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} provides_with entry {} of provides entry {}", e, j, i))?);
+        }
+        provides.push(ModuleProvidesEntry {
+            service_interface_name,
+            provides_with,
+        });
+    }
+    Ok(ModuleData {
+        name,
+        access_flags,
+        version,
+        requires,
+        exports,
+        opens,
+        uses,
+        provides,
+    })
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let count = read_u2(bytes, ix)?;
     let mut attributes = Vec::with_capacity(count.into());
@@ -687,6 +834,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "MethodParameters" => {
                 let methodparameters_data = read_methodparameters_data(bytes, ix, pool).map_err(|e| format!("{} of MethodParameters attribute {}", e, i))?;
                 AttributeData::MethodParameters(methodparameters_data)
+            }
+            "Module" => {
+                let module_data = read_module_data(bytes, ix, pool).map_err(|e| format!("{} of Module attribute {}", e, i))?;
+                AttributeData::Module(module_data)
             }
             _ => {
                 *ix += length;

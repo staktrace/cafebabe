@@ -466,6 +466,14 @@ pub(crate) fn read_cp_moduleinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc
     }
 }
 
+pub(crate) fn read_cp_packageinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Cow<'a, str>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::PackageInfo(x) => Ok(x.borrow().get().utf8()),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
 #[derive(Debug)]
 pub struct NameAndType<'a> {
     pub name: Cow<'a, str>,

@@ -88,8 +88,11 @@ bitflags! {
         const FINAL = 0x0010;
         const SUPER = 0x0020;
         const SYNCHRONIZED = 0x0020;
+        const OPEN = 0x0020;
+        const TRANSITIVE = 0x0020;
         const VOLATILE = 0x0040;
         const BRIDGE = 0x0040;
+        const STATIC_PHASE = 0x0040;
         const TRANSIENT = 0x0080;
         const VARARGS = 0x0080;
         const NATIVE = 0x0100;

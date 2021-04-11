@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 use crate::attributes::{AttributeInfo, read_attributes};
-use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
+use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt, read_cp_moduleinfo};
 
 pub(crate) fn err<T>(msg: &'static str) -> Result<T, String> {
     Err(msg.to_string())
@@ -100,6 +100,7 @@ bitflags! {
         const ANNOTATION = 0x2000;
         const ENUM = 0x4000;
         const MANDATED = 0x8000;
+        const MODULE = 0x8000;
     }
 }
 
@@ -196,6 +197,7 @@ bitflags! {
         const SYNTHETIC = AccessFlags::SYNTHETIC.bits();
         const ANNOTATION = AccessFlags::ANNOTATION.bits();
         const ENUM = AccessFlags::ENUM.bits();
+        const MODULE = AccessFlags::MODULE.bits();
     }
 }
 
@@ -223,12 +225,40 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     let constant_pool = read_constant_pool(raw_bytes, &mut ix, major_version)?;
 
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
-    let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?;
+    let is_module = access_flags.contains(ClassAccessFlags::MODULE);
+    if is_module {
+        if major_version < 53 {
+            return Err(format!("Found invalid MODULE class access flag on class file of major version {}", major_version));
+        }
+        if access_flags != ClassAccessFlags::MODULE {
+            return Err(format!("Found invalid class access flags {:?}; no other flags should be set with MODULE", access_flags));
+        }
+    }
+    let this_class = if is_module {
+        read_cp_moduleinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?
+    } else {
+        read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?
+    };
     let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} super_class", e))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
     let methods = read_methods(raw_bytes, &mut ix, &constant_pool)?;
     let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} of class", e))?;
+
+    if is_module {
+        if super_class.is_some() {
+            return Err(format!("Found non-empty super_class {}; expected none for module", super_class.unwrap()));
+        }
+        if interfaces.len() != 0 {
+            return Err(format!("Found {} interfaces; expected 0 for module", interfaces.len()));
+        }
+        if fields.len() != 0 {
+            return Err(format!("Found {} fields; expected 0 for module", fields.len()));
+        }
+        if methods.len() != 0 {
+            return Err(format!("Found {} methods; expected 0 for module", methods.len()));
+        }
+    }
 
     let class_file = ClassFile {
         major_version,

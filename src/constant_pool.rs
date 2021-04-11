@@ -76,7 +76,7 @@ pub enum ReferenceKind {
 }
 
 bitflags! {
-    pub(crate) struct ConstantPoolEntryTypes: u16 {
+    pub(crate) struct ConstantPoolEntryTypes: u32 {
         const ZERO = 0x0001;
         const UTF8 = 0x0002;
         const INTEGER = 0x0004;
@@ -92,7 +92,8 @@ bitflags! {
         const METHOD_HANDLE = 0x1000;
         const METHOD_TYPE = 0x2000;
         const INVOKE_DYNAMIC = 0x4000;
-        const UNUSED = 0x8000;
+        const MODULE_INFO = 0x8000;
+        const UNUSED = 0x10000;
 
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
         const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();
@@ -117,6 +118,7 @@ pub(crate) enum ConstantPoolEntry<'a> {
     MethodHandle(ReferenceKind, RefCell<ConstantPoolRef<'a>>),
     MethodType(RefCell<ConstantPoolRef<'a>>),
     InvokeDynamic(BootstrapMethodRef, RefCell<ConstantPoolRef<'a>>),
+    ModuleInfo(RefCell<ConstantPoolRef<'a>>),
     Unused,
 }
 
@@ -132,6 +134,7 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::MethodHandle(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::MethodType(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
+            ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
             _ => Ok(true),
         }
     }
@@ -147,6 +150,7 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::MethodHandle(_, y) => y.borrow().is_resolved(),
             ConstantPoolEntry::MethodType(x) => x.borrow().is_resolved(),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.borrow().is_resolved(),
+            ConstantPoolEntry::ModuleInfo(x) => x.borrow().is_resolved(),
             _ => true,
         }
     }
@@ -168,6 +172,7 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::MethodHandle(_, _) => ConstantPoolEntryTypes::METHOD_HANDLE,
             ConstantPoolEntry::MethodType(_) => ConstantPoolEntryTypes::METHOD_TYPE,
             ConstantPoolEntry::InvokeDynamic(_, _) => ConstantPoolEntryTypes::INVOKE_DYNAMIC,
+            ConstantPoolEntry::ModuleInfo(_) => ConstantPoolEntryTypes::MODULE_INFO,
             ConstantPoolEntry::Unused => ConstantPoolEntryTypes::UNUSED,
         }
     }
@@ -193,6 +198,7 @@ impl<'a> ConstantPoolEntry<'a> {
             }),
             ConstantPoolEntry::MethodType(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
+            ConstantPoolEntry::ModuleInfo(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
             _ => Ok(true),
         }
     }
@@ -318,6 +324,11 @@ fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Co
     Ok(ConstantPoolEntry::InvokeDynamic(bootstrap_method_ref, name_and_type_ref))
 }
 
+fn read_constant_module<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
+    let name_ref = read_unresolved_cp_ref(bytes, ix)?;
+    Ok(ConstantPoolEntry::ModuleInfo(name_ref))
+}
+
 fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), String> {
     let mut resolved_count = 0;
     while resolved_count < constant_pool.len() {
@@ -364,6 +375,7 @@ pub(crate) fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, major_vers
             15 => read_constant_methodhandle(bytes, ix)?,
             16 => read_constant_methodtype(bytes, ix)?,
             18 => read_constant_invokedynamic(bytes, ix)?,
+            19 => read_constant_module(bytes, ix)?,
             n => return Err(format!("Unexpected constant pool entry type {} at index {}", n, *ix - 1)),
         }));
         cp_ix += 1;
@@ -417,6 +429,14 @@ pub(crate) fn read_cp_classinfo_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool: &
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
         ConstantPoolEntry::ClassInfo(x) => Ok(Some(x.borrow().get().utf8())),
+        _ => err("Unexpected constant pool reference type for")
+    }
+}
+
+pub(crate) fn read_cp_moduleinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Cow<'a, str>, String> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::ModuleInfo(x) => Ok(x.borrow().get().utf8()),
         _ => err("Unexpected constant pool reference type for")
     }
 }

@@ -286,6 +286,7 @@ pub enum AttributeData<'a> {
     BootstrapMethods(Vec<BootstrapMethodEntry<'a>>),
     MethodParameters(Vec<MethodParameterEntry<'a>>),
     Module(ModuleData<'a>),
+    ModulePackages(Vec<Cow<'a, str>>),
     Other(&'a [u8]),
 }
 
@@ -728,6 +729,15 @@ fn read_module_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
     })
 }
 
+fn read_modulepackages_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
+    let count = read_u2(bytes, ix)?;
+    let mut packages = Vec::with_capacity(count.into());
+    for i in 0..count {
+        packages.push(read_cp_packageinfo(bytes, ix, pool).map_err(|e| format!("{} package name {}", e, i))?);
+    }
+    Ok(packages)
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let count = read_u2(bytes, ix)?;
     let mut attributes = Vec::with_capacity(count.into());
@@ -838,6 +848,10 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "Module" => {
                 let module_data = read_module_data(bytes, ix, pool).map_err(|e| format!("{} of Module attribute {}", e, i))?;
                 AttributeData::Module(module_data)
+            }
+            "ModulePackages" => {
+                let modulepackages_data = read_modulepackages_data(bytes, ix, pool).map_err(|e| format!("{} of ModulePackages attribute {}", e, i))?;
+                AttributeData::ModulePackages(modulepackages_data)
             }
             _ => {
                 *ix += length;

@@ -9,7 +9,7 @@ description = "A simple parser for Java class files"
 homepage = "https://github.com/staktrace/cafebabe/blob/master/README.md"
 repository = "https://github.com/staktrace/cafebabe"
 readme = "README.md"
-keywords = ["parser", "java", "class", "jvm"]
+keywords = ["parse", "java", "class", "jvm", "classfile"]
 categories = ["parsing"]
 
 [badges]

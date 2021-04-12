@@ -223,8 +223,8 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     if read_u4(raw_bytes, &mut ix)? != 0xCAFEBABE {
         return err("Unexpected magic header");
     }
-    let major_version = read_u2(raw_bytes, &mut ix)?;
     let minor_version = read_u2(raw_bytes, &mut ix)?;
+    let major_version = read_u2(raw_bytes, &mut ix)?;
     let constant_pool = read_constant_pool(raw_bytes, &mut ix, major_version)?;
 
     let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;

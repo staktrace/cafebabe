@@ -261,6 +261,13 @@ pub struct ModuleData<'a> {
 }
 
 #[derive(Debug)]
+pub struct RecordComponentEntry<'a> {
+    pub name: Cow<'a, str>,
+    pub descriptor: Cow<'a, str>,
+    pub attributes: Vec<AttributeInfo<'a>>,
+}
+
+#[derive(Debug)]
 pub enum AttributeData<'a> {
     ConstantValue(LiteralConstant<'a>),
     Code(CodeData<'a>),
@@ -287,6 +294,10 @@ pub enum AttributeData<'a> {
     MethodParameters(Vec<MethodParameterEntry<'a>>),
     Module(ModuleData<'a>),
     ModulePackages(Vec<Cow<'a, str>>),
+    ModuleMainClass(Cow<'a, str>),
+    NestHost(Cow<'a, str>),
+    NestMembers(Vec<Cow<'a, str>>),
+    Record(Vec<RecordComponentEntry<'a>>),
     Other(&'a [u8]),
 }
 
@@ -738,6 +749,31 @@ fn read_modulepackages_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Cons
     Ok(packages)
 }
 
+fn read_nestmembers_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
+    let count = read_u2(bytes, ix)?;
+    let mut members = Vec::with_capacity(count.into());
+    for i in 0..count {
+        members.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} class name {}", e, i))?);
+    }
+    Ok(members)
+}
+
+fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<RecordComponentEntry<'a>>, String> {
+    let count = read_u2(bytes, ix)?;
+    let mut components = Vec::with_capacity(count.into());
+    for i in 0..count {
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of entry {}", e, i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor of entry {}", e, i))?;
+        let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} attributes of entry {}", e, i))?;
+        components.push(RecordComponentEntry {
+            name,
+            descriptor,
+            attributes,
+        });
+    }
+    Ok(components)
+}
+
 pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
     let count = read_u2(bytes, ix)?;
     let mut attributes = Vec::with_capacity(count.into());
@@ -852,6 +888,24 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             "ModulePackages" => {
                 let modulepackages_data = read_modulepackages_data(bytes, ix, pool).map_err(|e| format!("{} of ModulePackages attribute {}", e, i))?;
                 AttributeData::ModulePackages(modulepackages_data)
+            }
+            "ModuleMainClass" => {
+                ensure_length(length, 2).map_err(|e| format!("{} ModuleMainClass attribute {}", e, i))?;
+                let main_class = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} of ModuleMainClass attribute {}", e, i))?;
+                AttributeData::ModuleMainClass(main_class)
+            }
+            "NestHost" => {
+                ensure_length(length, 2).map_err(|e| format!("{} NestHost attribute {}", e, i))?;
+                let host_class = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} of NestHost attribute {}", e, i))?;
+                AttributeData::NestHost(host_class)
+            }
+            "NestMembers" => {
+                let nestmembers_data = read_nestmembers_data(bytes, ix, pool).map_err(|e| format!("{} of NestMembers attribute {}", e, i))?;
+                AttributeData::NestMembers(nestmembers_data)
+            }
+            "Record" => {
+                let record_data = read_record_data(bytes, ix, pool).map_err(|e| format!("{} of Record attribute {}", e, i))?;
+                AttributeData::Record(record_data)
             }
             _ => {
                 *ix += length;

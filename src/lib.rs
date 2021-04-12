@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use std::rc::Rc;
 
 use crate::attributes::{AttributeInfo, read_attributes};
-use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt, read_cp_moduleinfo};
+use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
 
 pub(crate) fn err<T>(msg: &'static str) -> Result<T, String> {
     Err(msg.to_string())
@@ -237,11 +237,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
             return Err(format!("Found invalid class access flags {:?}; no other flags should be set with MODULE", access_flags));
         }
     }
-    let this_class = if is_module {
-        read_cp_moduleinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?
-    } else {
-        read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?
-    };
+    let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} this_class", e))?;
     let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool).map_err(|e| format!("{} super_class", e))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;

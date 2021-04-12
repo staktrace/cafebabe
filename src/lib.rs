@@ -10,7 +10,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::attributes::{AttributeData, AttributeInfo, read_attributes};
-use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
+use crate::constant_pool::{ConstantPoolEntry, ConstantPoolIter, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
 
 pub(crate) fn err<T>(msg: &'static str) -> Result<T, String> {
     Err(msg.to_string())
@@ -239,6 +239,12 @@ pub struct ClassFile<'a> {
     pub fields: Vec<FieldInfo<'a>>,
     pub methods: Vec<MethodInfo<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
+}
+
+impl<'a> ClassFile<'a> {
+    pub fn constantpool_iter(&'a self) -> ConstantPoolIter<'a> {
+        ConstantPoolIter::new(&self.constant_pool)
+    }
 }
 
 pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {

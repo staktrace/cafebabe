@@ -628,3 +628,67 @@ pub(crate) fn read_cp_bootstrap_argument<'a>(bytes: &'a [u8], ix: &mut usize, po
         _ => err("Unexpected constant pool reference type for")
     }
 }
+
+#[derive(Debug)]
+pub enum ConstantPoolItem<'a> {
+    LiteralConstant(LiteralConstant<'a>),
+    ClassInfo(Cow<'a, str>),
+    FieldRef { class_name: Cow<'a, str>, name_and_type: NameAndType<'a> },
+    MethodRef { class_name: Cow<'a, str>, name_and_type: NameAndType<'a> },
+    InterfaceMethodRef { class_name: Cow<'a, str>, name_and_type: NameAndType<'a> },
+    NameAndType(NameAndType<'a>),
+    MethodHandle(MethodHandle<'a>),
+    MethodType(Cow<'a, str>),
+    Dynamic { attr_index: u16, name_and_type: NameAndType<'a> },
+    InvokeDynamic { attr_index: u16, name_and_type: NameAndType<'a> },
+    ModuleInfo(Cow<'a, str>),
+    PackageInfo(Cow<'a, str>),
+}
+
+pub struct ConstantPoolIter<'a> {
+    constant_pool: &'a [Rc<ConstantPoolEntry<'a>>],
+    index: usize,
+}
+
+impl<'a> ConstantPoolIter<'a> {
+    pub(crate) fn new(constant_pool: &'a [Rc<ConstantPoolEntry<'a>>]) -> Self {
+        ConstantPoolIter {
+            constant_pool,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for ConstantPoolIter<'a> {
+    type Item = ConstantPoolItem<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while self.index < self.constant_pool.len() {
+            self.index += 1;
+            let item = match self.constant_pool[self.index].deref() {
+                ConstantPoolEntry::Zero => panic!("This iterator should never see a Zero item"),
+                ConstantPoolEntry::Utf8(_) |
+                ConstantPoolEntry::Utf8Bytes(_) => continue,
+                ConstantPoolEntry::Integer(v) => ConstantPoolItem::LiteralConstant(LiteralConstant::Integer(*v)),
+                ConstantPoolEntry::Float(v) => ConstantPoolItem::LiteralConstant(LiteralConstant::Float(*v)),
+                ConstantPoolEntry::Long(v) => ConstantPoolItem::LiteralConstant(LiteralConstant::Long(*v)),
+                ConstantPoolEntry::Double(v) => ConstantPoolItem::LiteralConstant(LiteralConstant::Double(*v)),
+                ConstantPoolEntry::ClassInfo(x) => ConstantPoolItem::ClassInfo(x.borrow().get().utf8()),
+                ConstantPoolEntry::String(x) => ConstantPoolItem::LiteralConstant(x.borrow().get().string_literal()),
+                ConstantPoolEntry::FieldRef(c, m) => ConstantPoolItem::FieldRef { class_name: c.borrow().get().classinfo(), name_and_type: m.borrow().get().name_and_type() },
+                ConstantPoolEntry::MethodRef(c, m) => ConstantPoolItem::MethodRef { class_name: c.borrow().get().classinfo(), name_and_type: m.borrow().get().name_and_type() },
+                ConstantPoolEntry::InterfaceMethodRef(c, m) => ConstantPoolItem::InterfaceMethodRef { class_name: c.borrow().get().classinfo(), name_and_type: m.borrow().get().name_and_type() },
+                ConstantPoolEntry::NameAndType(x, y) => ConstantPoolItem::NameAndType(NameAndType { name: x.borrow().get().utf8(), descriptor: y.borrow().get().utf8() }),
+                ConstantPoolEntry::MethodHandle(x, y) => ConstantPoolItem::MethodHandle(make_method_handle(x, y).unwrap()),
+                ConstantPoolEntry::MethodType(x) => ConstantPoolItem::MethodType(x.borrow().get().utf8()),
+                ConstantPoolEntry::Dynamic(x, y) => ConstantPoolItem::Dynamic { attr_index: *x, name_and_type: y.borrow().get().name_and_type() },
+                ConstantPoolEntry::InvokeDynamic(x, y) => ConstantPoolItem::InvokeDynamic { attr_index: *x, name_and_type: y.borrow().get().name_and_type() },
+                ConstantPoolEntry::ModuleInfo(x) => ConstantPoolItem::ModuleInfo(x.borrow().get().utf8()),
+                ConstantPoolEntry::PackageInfo(x) => ConstantPoolItem::PackageInfo(x.borrow().get().utf8()),
+                ConstantPoolEntry::Unused => continue,
+            };
+            return Some(item);
+        }
+        None
+    }
+}

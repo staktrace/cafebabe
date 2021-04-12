@@ -133,7 +133,7 @@ fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry
     let count = read_u2(bytes, ix)?;
     let mut fields = Vec::with_capacity(count.into());
     for i in 0..count {
-        let access_flags = FieldAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on field")?;
+        let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of class field {}", e, i))?;
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor of class field {}", e, i))?;
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of class field {}", e, i))?;
@@ -176,7 +176,7 @@ fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntr
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
     for i in 0..count {
-        let access_flags = MethodAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or("Invalid access flags found on method")?;
+        let access_flags = MethodAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of class method {}", e, i))?;
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor of class method {}", e, i))?;
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of class method {}", e, i))?;
@@ -227,7 +227,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
     let major_version = read_u2(raw_bytes, &mut ix)?;
     let constant_pool = read_constant_pool(raw_bytes, &mut ix, major_version)?;
 
-    let access_flags = ClassAccessFlags::from_bits(read_u2(raw_bytes, &mut ix)?).ok_or("Invalid access flags found on class")?;
+    let access_flags = ClassAccessFlags::from_bits_truncate(read_u2(raw_bytes, &mut ix)?);
     let is_module = access_flags.contains(ClassAccessFlags::MODULE);
     if is_module {
         if major_version < 53 {

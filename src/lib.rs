@@ -2,8 +2,8 @@
 extern crate bitflags;
 extern crate cesu8;
 
-mod attributes;
-mod constant_pool;
+pub mod attributes;
+pub mod constant_pool;
 
 use std::borrow::Cow;
 use std::ops::Deref;

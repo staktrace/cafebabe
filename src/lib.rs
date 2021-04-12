@@ -6,9 +6,10 @@ mod attributes;
 mod constant_pool;
 
 use std::borrow::Cow;
+use std::ops::Deref;
 use std::rc::Rc;
 
-use crate::attributes::{AttributeInfo, read_attributes};
+use crate::attributes::{AttributeData, AttributeInfo, read_attributes};
 use crate::constant_pool::{ConstantPoolEntry, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
 
 pub(crate) fn err<T>(msg: &'static str) -> Result<T, String> {
@@ -63,11 +64,6 @@ pub(crate) fn read_u8(bytes: &[u8], ix: &mut usize) -> Result<u64, String> {
         ((bytes[*ix + 7] as u64));
     *ix += 8;
     Ok(result)
-}
-
-#[derive(Debug)]
-pub(crate) enum BootstrapMethodRef {
-    Unresolved(u16),
 }
 
 fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
@@ -204,6 +200,33 @@ bitflags! {
     }
 }
 
+fn validate_bootstrap_methods<'a>(pool: &[Rc<ConstantPoolEntry<'a>>], attributes: &[AttributeInfo<'a>]) -> Result<(), String> {
+    for cp_entry in pool {
+        match cp_entry.deref() {
+            ConstantPoolEntry::Dynamic(x, _) |
+            ConstantPoolEntry::InvokeDynamic(x, _) => {
+                let mut found = 0;
+                for attr in attributes {
+                    match &attr.data {
+                        AttributeData::BootstrapMethods(methods) => {
+                            found += 1;
+                            if usize::from(*x) >= methods.len() {
+                                return err("Constant pool item contained invalid index into BootstrapMethods class attribute");
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                if found != 1 {
+                    return Err(format!("Found unexpected number of BootstrapMethods attributes in class; found {}, expected 1", found));
+                }
+            }
+            _ => continue,
+        };
+    }
+    Ok(())
+}
+
 #[derive(Debug)]
 pub struct ClassFile<'a> {
     pub major_version: u16,
@@ -258,6 +281,8 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, String> {
             return Err(format!("Found {} methods; expected 0 for module", methods.len()));
         }
     }
+
+    validate_bootstrap_methods(&constant_pool, &attributes)?;
 
     let class_file = ClassFile {
         major_version,

@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use crate::{err, read_u1, read_u2, read_u4, read_u8, BootstrapMethodRef};
+use crate::{err, read_u1, read_u2, read_u4, read_u8};
 
 #[derive(Debug)]
 pub(crate) enum ConstantPoolRef<'a> {
@@ -102,6 +102,8 @@ bitflags! {
         const BOOTSTRAP_ARGUMENT = Self::CONSTANTS.bits() | Self::CLASS_INFO.bits() | Self::METHOD_HANDLE.bits() | Self::METHOD_TYPE.bits();
     }
 }
+
+type BootstrapMethodRef = u16;
 
 #[derive(Debug)]
 pub(crate) enum ConstantPoolEntry<'a> {
@@ -354,13 +356,13 @@ fn read_constant_methodtype<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Const
 }
 
 fn read_constant_dynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let bootstrap_method_ref = BootstrapMethodRef::Unresolved(read_u2(bytes, ix)?);
+    let bootstrap_method_ref = read_u2(bytes, ix)?;
     let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::Dynamic(bootstrap_method_ref, name_and_type_ref))
 }
 
 fn read_constant_invokedynamic<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
-    let bootstrap_method_ref = BootstrapMethodRef::Unresolved(read_u2(bytes, ix)?);
+    let bootstrap_method_ref = read_u2(bytes, ix)?;
     let name_and_type_ref = read_unresolved_cp_ref(bytes, ix)?;
     Ok(ConstantPoolEntry::InvokeDynamic(bootstrap_method_ref, name_and_type_ref))
 }

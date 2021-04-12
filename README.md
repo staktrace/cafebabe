@@ -26,7 +26,15 @@ There are a bunch of different class file parsers available on crates.io. Main d
 - *Minimal dependencies*.
   The crate only has a couple of dependencies, and neither of those pull in any transitive dependencies.
 
-At this point, `cafebabe` will do some kinds of validation/checking at parse time, but not everything described in Chapter 4 of the JVM spec.
+Current status
+--------------
+The main parsing code is fully implemented. All structures (including attributes) described in Chapter 4 of the JVM spec are supported.
+The entire `modules` file of the OpenJDK 16 distribution can be parsed without errors.
+`cafebabe` will do some kinds of validation/checking at parse time, but not everything described in Chapter 4 of the JVM spec.
 It doesn't even do all the things described in section 4.8 ("Format checking"), although a reasonable goal for this project is to implement that part fully.
 
-Why is the project called `cafebabe`? Because the first 4 bytes in any valid class file are a magic identifier with the value 0xCAFEBABE.
+Q&A
+---
+*Why is the project called `cafebabe`?*
+
+Because the first 4 bytes in any valid class file are a magic identifier with the value 0xCAFEBABE.

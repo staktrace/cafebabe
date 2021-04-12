@@ -107,6 +107,7 @@ bitflags! {
 pub(crate) enum ConstantPoolEntry<'a> {
     Zero,
     Utf8(Cow<'a, str>),
+    Utf8Bytes(&'a [u8]),
     Integer(i32),
     Float(f32),
     Long(i64),
@@ -166,7 +167,8 @@ impl<'a> ConstantPoolEntry<'a> {
     fn get_type(&self) -> ConstantPoolEntryTypes {
         match self {
             ConstantPoolEntry::Zero => ConstantPoolEntryTypes::ZERO,
-            ConstantPoolEntry::Utf8(_) => ConstantPoolEntryTypes::UTF8,
+            ConstantPoolEntry::Utf8(_) |
+            ConstantPoolEntry::Utf8Bytes(_) => ConstantPoolEntryTypes::UTF8,
             ConstantPoolEntry::Integer(_) => ConstantPoolEntryTypes::INTEGER,
             ConstantPoolEntry::Float(_) => ConstantPoolEntryTypes::FLOAT,
             ConstantPoolEntry::Long(_) => ConstantPoolEntryTypes::LONG,
@@ -230,6 +232,14 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
+    fn string_literal(&self) -> LiteralConstant<'a> {
+        match self {
+            ConstantPoolEntry::Utf8(x) => LiteralConstant::String(x.clone()),
+            ConstantPoolEntry::Utf8Bytes(x) => LiteralConstant::StringBytes(x),
+            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        }
+    }
+
     fn classinfo(&self) -> Cow<'a, str> {
         match self {
             ConstantPoolEntry::ClassInfo(x) => x.borrow().get().utf8(),
@@ -248,6 +258,7 @@ impl<'a> ConstantPoolEntry<'a> {
 fn read_unresolved_cp_ref<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<RefCell<ConstantPoolRef<'a>>, String> {
     Ok(RefCell::new(ConstantPoolRef::Unresolved(read_u2(bytes, ix)?)))
 }
+
 fn read_constant_utf8<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
     let length = read_u2(bytes, ix)? as usize;
     if bytes.len() < *ix + length {
@@ -255,7 +266,19 @@ fn read_constant_utf8<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoo
     }
     let modified_utf8_data = &bytes[*ix .. *ix + length];
     *ix += length;
-    Ok(ConstantPoolEntry::Utf8(cesu8::from_java_cesu8(modified_utf8_data).map_err(|e| format!("Error reading CONSTANT_Utf8 at indices {}..{}: {}", *ix - length, *ix, e))?))
+    // If a Java file contains a literal string such as:
+    //   String watchThis = "\uDAB9\uBAF5";
+    // then that gets encoded into the constant pool as a CONSTANT_Utf8 entry with bytes:
+    //   0xED, 0xAA, 0xB9, 0xEB, 0xAB, 0xB4
+    // which is not representable as a Rust string because decodes to an unpaired surrogate.
+    // So for cases like these we need to be able to fall back to storing the raw bytes,
+    // and we use the Utf8Bytes internal type for that. These should only occur in Java
+    // literal constants, so we can still expose other things (like descriptors and classnames)
+    // as Rust strings. Only literal Java strings need to be able to expose the raw bytes.
+    match cesu8::from_java_cesu8(modified_utf8_data) {
+        Ok(rust_str) => Ok(ConstantPoolEntry::Utf8(rust_str)),
+        _ => Ok(ConstantPoolEntry::Utf8Bytes(modified_utf8_data)),
+    }
 }
 
 fn read_constant_integer<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, String> {
@@ -496,6 +519,7 @@ pub enum LiteralConstant<'a> {
     Long(i64),
     Double(f64),
     String(Cow<'a, str>),
+    StringBytes(&'a [u8]),
 }
 
 pub(crate) fn read_cp_literalconstant<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<LiteralConstant<'a>, String> {
@@ -505,7 +529,7 @@ pub(crate) fn read_cp_literalconstant<'a>(bytes: &'a [u8], ix: &mut usize, pool:
         ConstantPoolEntry::Float(v) => Ok(LiteralConstant::Float(*v)),
         ConstantPoolEntry::Long(v) => Ok(LiteralConstant::Long(*v)),
         ConstantPoolEntry::Double(v) => Ok(LiteralConstant::Double(*v)),
-        ConstantPoolEntry::String(v) => Ok(LiteralConstant::String(v.borrow().get().utf8())),
+        ConstantPoolEntry::String(v) => Ok(v.borrow().get().string_literal()),
         _ => err("Unexpected constant pool reference type for")
     }
 }
@@ -595,7 +619,7 @@ pub(crate) fn read_cp_bootstrap_argument<'a>(bytes: &'a [u8], ix: &mut usize, po
         ConstantPoolEntry::Float(v) => Ok(BootstrapArgument::LiteralConstant(LiteralConstant::Float(*v))),
         ConstantPoolEntry::Long(v) => Ok(BootstrapArgument::LiteralConstant(LiteralConstant::Long(*v))),
         ConstantPoolEntry::Double(v) => Ok(BootstrapArgument::LiteralConstant(LiteralConstant::Double(*v))),
-        ConstantPoolEntry::String(v) => Ok(BootstrapArgument::LiteralConstant(LiteralConstant::String(v.borrow().get().utf8()))),
+        ConstantPoolEntry::String(v) => Ok(BootstrapArgument::LiteralConstant(v.borrow().get().string_literal())),
         ConstantPoolEntry::ClassInfo(x) => Ok(BootstrapArgument::ClassInfo(x.borrow().get().utf8())),
         ConstantPoolEntry::MethodHandle(x, y) => Ok(BootstrapArgument::MethodHandle(make_method_handle(x, y)?)),
         ConstantPoolEntry::MethodType(x) => Ok(BootstrapArgument::MethodType(x.borrow().get().utf8())),

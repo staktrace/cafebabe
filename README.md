@@ -29,4 +29,4 @@ There are a bunch of different class file parsers available on crates.io. Main d
 At this point, `cafebabe` will do some kinds of validation/checking at parse time, but not everything described in Chapter 4 of the JVM spec.
 It doesn't even do all the things described in section 4.8 ("Format checking"), although a reasonable goal for this project is to implement that part fully.
 
-Why is the project called cafebabe? Because the first 4 bytes in any valid class file are a magic identifier with the value 0xCAFEBABE.
+Why is the project called `cafebabe`? Because the first 4 bytes in any valid class file are a magic identifier with the value 0xCAFEBABE.

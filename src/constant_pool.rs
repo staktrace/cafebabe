@@ -223,7 +223,7 @@ impl<'a> ConstantPoolEntry<'a> {
         if allowed.contains(self.get_type()) {
             Ok(true)
         } else {
-            fail!("Unexpected constant pool reference type for")
+            fail!("Unexpected constant pool reference type")
         }
     }
 
@@ -444,7 +444,7 @@ pub(crate) fn read_constant_pool<'a>(bytes: &'a [u8], ix: &mut usize, major_vers
 fn read_cp_ref_any<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Rc<ConstantPoolEntry<'a>>, ParseError> {
     let cp_index = read_u2(bytes, ix)? as usize;
     if cp_index >= pool.len() {
-        fail!("Out-of-bounds index {} in constant pool reference for", cp_index);
+        fail!("Out-of-bounds index {} in constant pool reference", cp_index);
     }
     Ok(pool[cp_index].clone())
 }
@@ -453,7 +453,7 @@ pub(crate) fn read_cp_utf8<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Utf8(x) => Ok(x.clone()),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -462,7 +462,7 @@ pub(crate) fn read_cp_utf8_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<C
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
         ConstantPoolEntry::Utf8(x) => Ok(Some(x.clone())),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -470,7 +470,7 @@ pub(crate) fn read_cp_classinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::ClassInfo(x) => Ok(x.borrow().get().utf8()),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -479,7 +479,7 @@ pub(crate) fn read_cp_classinfo_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool: &
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
         ConstantPoolEntry::ClassInfo(x) => Ok(Some(x.borrow().get().utf8())),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -487,7 +487,7 @@ pub(crate) fn read_cp_moduleinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::ModuleInfo(x) => Ok(x.borrow().get().utf8()),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -495,7 +495,7 @@ pub(crate) fn read_cp_packageinfo<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[R
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::PackageInfo(x) => Ok(x.borrow().get().utf8()),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -510,7 +510,7 @@ pub(crate) fn read_cp_nameandtype_opt<'a>(bytes: &'a [u8], ix: &mut usize, pool:
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
         ConstantPoolEntry::NameAndType(x, y) => Ok(Some(NameAndType { name: x.borrow().get().utf8(), descriptor: y.borrow().get().utf8() })),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -532,7 +532,7 @@ pub(crate) fn read_cp_literalconstant<'a>(bytes: &'a [u8], ix: &mut usize, pool:
         ConstantPoolEntry::Long(v) => Ok(LiteralConstant::Long(*v)),
         ConstantPoolEntry::Double(v) => Ok(LiteralConstant::Double(*v)),
         ConstantPoolEntry::String(v) => Ok(v.borrow().get().string_literal()),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -540,7 +540,7 @@ pub(crate) fn read_cp_integer<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Integer(v) => Ok(*v),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -548,7 +548,7 @@ pub(crate) fn read_cp_float<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Cons
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Float(v) => Ok(*v),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -556,7 +556,7 @@ pub(crate) fn read_cp_long<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Long(v) => Ok(*v),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -564,7 +564,7 @@ pub(crate) fn read_cp_double<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Double(v) => Ok(*v),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -588,7 +588,7 @@ fn make_method_handle<'a>(x: &ReferenceKind, y: &RefCell<ConstantPoolRef<'a>>) -
         ConstantPoolEntry::FieldRef(c, m) => (c.borrow().get().classinfo(), MemberKind::Field, m.borrow().get().name_and_type()),
         ConstantPoolEntry::MethodRef(c, m) => (c.borrow().get().classinfo(), MemberKind::Method, m.borrow().get().name_and_type()),
         ConstantPoolEntry::InterfaceMethodRef(c, m) => (c.borrow().get().classinfo(), MemberKind::InterfaceMethod, m.borrow().get().name_and_type()),
-        _ => fail!("Unexpected constant pool reference type for"),
+        _ => fail!("Unexpected constant pool reference type"),
     };
     Ok(MethodHandle {
         kind: *x,
@@ -602,7 +602,7 @@ pub(crate) fn read_cp_methodhandle<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::MethodHandle(x, y) => make_method_handle(x, y),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 
@@ -625,7 +625,7 @@ pub(crate) fn read_cp_bootstrap_argument<'a>(bytes: &'a [u8], ix: &mut usize, po
         ConstantPoolEntry::ClassInfo(x) => Ok(BootstrapArgument::ClassInfo(x.borrow().get().utf8())),
         ConstantPoolEntry::MethodHandle(x, y) => Ok(BootstrapArgument::MethodHandle(make_method_handle(x, y)?)),
         ConstantPoolEntry::MethodType(x) => Ok(BootstrapArgument::MethodType(x.borrow().get().utf8())),
-        _ => fail!("Unexpected constant pool reference type for")
+        _ => fail!("Unexpected constant pool reference type")
     }
 }
 

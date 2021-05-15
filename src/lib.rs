@@ -66,7 +66,7 @@ impl fmt::Display for ParseError {
 
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     if bytes.len() < *ix + 1 {
-        fail!("Unexpected end of stream reading u2 at index {}", *ix);
+        fail!("Unexpected end of stream reading u1 at index {}", *ix);
     }
     let result = bytes[*ix];
     *ix += 1;

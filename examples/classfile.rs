@@ -10,7 +10,7 @@ fn main() {
         println!("Parsing {:?}...", arg);
         match cafebabe::parse_class(&bytes) {
             Ok(class) => println!("Successfully parsed {:?}", class.this_class),
-            Err(e) => println!("Error: {:?}", e),
+            Err(e) => println!("Error: {}", e),
         };
     }
 }

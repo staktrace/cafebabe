@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use crate::{read_u1, read_u2, read_u4, AccessFlags};
+use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError};
 use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, MethodHandle, BootstrapArgument};
 use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
     read_cp_literalconstant, read_cp_integer, read_cp_float, read_cp_long, read_cp_double, read_cp_methodhandle,
@@ -307,19 +307,19 @@ pub struct AttributeInfo<'a> {
     pub data: AttributeData<'a>,
 }
 
-fn ensure_length(length: usize, expected: usize) -> Result<(), String> {
+fn ensure_length(length: usize, expected: usize) -> Result<(), ParseError> {
     if length != expected {
-        return Err(format!("Unexpected length {} for", length));
+        fail!("Unexpected length {} for", length);
     }
     Ok(())
 }
 
-fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<CodeData<'a>, String> {
+fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<CodeData<'a>, ParseError> {
     let max_stack = read_u2(bytes, ix)?;
     let max_locals = read_u2(bytes, ix)?;
     let code_length = read_u4(bytes, ix)? as usize;
     if bytes.len() < *ix + code_length {
-        return Err(format!("Unexpected end of stream reading code attribute at index {}", *ix));
+        fail!("Unexpected end of stream reading code attribute at index {}", *ix);
     }
     let code = &bytes[*ix .. *ix + code_length];
     *ix += code_length;
@@ -329,7 +329,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
         let start_pc = read_u2(bytes, ix)?;
         let end_pc = read_u2(bytes, ix)?;
         let handler_pc = read_u2(bytes, ix)?;
-        let catch_type = read_cp_classinfo_opt(bytes, ix, pool).map_err(|e| format!("{} catch type of exception table entry {}", e, i))?;
+        let catch_type = read_cp_classinfo_opt(bytes, ix, pool).map_err(|e| err!(e, "catch type of exception table entry {}", i))?;
         exception_table.push(ExceptionTableEntry {
             start_pc,
             end_pc,
@@ -337,7 +337,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
             catch_type,
         });
     }
-    let code_attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} of code attribute", e))?;
+    let code_attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "of code attribute"))?;
     Ok(CodeData {
         max_stack,
         max_locals,
@@ -347,7 +347,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
     })
 }
 
-fn read_stackmaptable_verification<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<VerificationType<'a>, String> {
+fn read_stackmaptable_verification<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<VerificationType<'a>, ParseError> {
     let verification_type = match read_u1(bytes, ix)? {
         0 => VerificationType::Top,
         1 => VerificationType::Integer,
@@ -357,32 +357,32 @@ fn read_stackmaptable_verification<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[
         5 => VerificationType::Null,
         6 => VerificationType::UninitializedThis,
         7 => {
-            let class_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} object verification type", e))?;
+            let class_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "object verification type"))?;
             VerificationType::Object { class_name }
         }
         8 => {
             let code_offset = read_u2(bytes, ix)?;
             VerificationType::Uninitialized { code_offset }
         }
-        v => return Err(format!("Unrecognized verification type {}", v)),
+        v => fail!("Unrecognized verification type {}", v),
     };
     Ok(verification_type)
 }
 
-fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<StackMapEntry<'a>>, String> {
+fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<StackMapEntry<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut stackmapframes = Vec::with_capacity(count.into());
     for i in 0..count {
         let entry = match read_u1(bytes, ix)? {
             v @ 0..=63 => StackMapEntry::Same { offset_delta: v.into() },
             v @ 64..=127 => {
-                let stack = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame stack map entry {}", e, i))?;
+                let stack = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| err!(e, "for same_locals_1_stack_item_frame stack map entry {}", i))?;
                 StackMapEntry::SameLocals1StackItem { offset_delta: (v - 64).into(), stack }
             }
-            v @ 128..=246 => return Err(format!("Unrecognized discriminant {} for stack map entry {}", v, i)),
+            v @ 128..=246 => fail!("Unrecognized discriminant {} for stack map entry {}", v, i),
             247 => {
                 let offset_delta = read_u2(bytes, ix)?;
-                let stack = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for same_locals_1_stack_item_frame_extended stack map entry {}", e, i))?;
+                let stack = read_stackmaptable_verification(bytes, ix, pool).map_err(|e| err!(e, "for same_locals_1_stack_item_frame_extended stack map entry {}", i))?;
                 StackMapEntry::SameLocals1StackItem { offset_delta, stack }
             }
             v @ 248..=250 => {
@@ -398,7 +398,7 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
                 let verification_count = v - 251;
                 let mut locals = Vec::with_capacity(verification_count.into());
                 for j in 0..verification_count {
-                    locals.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of append stack map entry {}", e, j, i))?);
+                    locals.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| err!(e, "for local entry {} of append stack map entry {}", j, i))?);
                 }
                 StackMapEntry::Append { offset_delta, locals }
             }
@@ -407,12 +407,12 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
                 let locals_count = read_u2(bytes, ix)?;
                 let mut locals = Vec::with_capacity(locals_count.into());
                 for j in 0..locals_count {
-                    locals.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for local entry {} of full-frame stack map entry {}", e, j, i))?);
+                    locals.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| err!(e, "for local entry {} of full-frame stack map entry {}", j, i))?);
                 }
                 let stack_count = read_u2(bytes, ix)?;
                 let mut stack = Vec::with_capacity(stack_count.into());
                 for j in 0..stack_count {
-                    stack.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| format!("{} for stack entry {} of full-frame stack map entry {}", e, j, i))?);
+                    stack.push(read_stackmaptable_verification(bytes, ix, pool).map_err(|e| err!(e, "for stack entry {} of full-frame stack map entry {}", j, i))?);
                 }
                 StackMapEntry::FullFrame { offset_delta, locals, stack }
             }
@@ -422,23 +422,23 @@ fn read_stackmaptable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     Ok(stackmapframes)
 }
 
-fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
+fn read_exceptions_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut exceptions = Vec::with_capacity(count.into());
     for i in 0..count {
-        let exception = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} exception {}", e, i))?;
+        let exception = read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "exception {}", i))?;
         exceptions.push(exception);
     }
     Ok(exceptions)
 }
 
-fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<InnerClassEntry<'a>>, String> {
+fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<InnerClassEntry<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut innerclasses = Vec::with_capacity(count.into());
     for i in 0..count {
-        let inner_class_info = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} inner class info for inner class {}", e, i))?;
-        let outer_class_info = read_cp_classinfo_opt(bytes, ix, pool).map_err(|e| format!("{} outer class info for inner class {}", e, i))?;
-        let inner_name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} inner name for inner class {}", e, i))?;
+        let inner_class_info = read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "inner class info for inner class {}", i))?;
+        let outer_class_info = read_cp_classinfo_opt(bytes, ix, pool).map_err(|e| err!(e, "outer class info for inner class {}", i))?;
+        let inner_name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| err!(e, "inner name for inner class {}", i))?;
         let access_flags = InnerClassAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         innerclasses.push(InnerClassEntry {
             inner_class_info,
@@ -450,7 +450,7 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
     Ok(innerclasses)
 }
 
-fn read_linenumber_data<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Vec<LineNumberEntry>, String> {
+fn read_linenumber_data<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Vec<LineNumberEntry>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut linenumbers = Vec::with_capacity(count.into());
     for _i in 0..count {
@@ -464,14 +464,14 @@ fn read_linenumber_data<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Vec<LineN
     Ok(linenumbers)
 }
 
-fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableEntry<'a>>, String> {
+fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableEntry<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut localvariables = Vec::with_capacity(count.into());
     for i in 0..count {
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
-        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name for variable {}", e, i))?;
-        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor for variable {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name for variable {}", i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor for variable {}", i))?;
         let index = read_u2(bytes, ix)?;
         localvariables.push(LocalVariableEntry {
             start_pc,
@@ -484,14 +484,14 @@ fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
     Ok(localvariables)
 }
 
-fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableTypeEntry<'a>>, String> {
+fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<LocalVariableTypeEntry<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut localvariabletypes = Vec::with_capacity(count.into());
     for i in 0..count {
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
-        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name for variable {}", e, i))?;
-        let signature = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} signature for variable {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name for variable {}", i))?;
+        let signature = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "signature for variable {}", i))?;
         let index = read_u2(bytes, ix)?;
         localvariabletypes.push(LocalVariableTypeEntry {
             start_pc,
@@ -504,7 +504,7 @@ fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<C
     Ok(localvariabletypes)
 }
 
-fn read_annotation_element_value<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<AnnotationElementValue<'a>, String> {
+fn read_annotation_element_value<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<AnnotationElementValue<'a>, ParseError> {
     let value = match read_u1(bytes, ix)? as char {
         'B' => AnnotationElementValue::ByteConstant(read_cp_integer(bytes, ix, pool)?),
         'C' => AnnotationElementValue::CharConstant(read_cp_integer(bytes, ix, pool)?),
@@ -522,22 +522,22 @@ fn read_annotation_element_value<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc
             let count = read_u2(bytes, ix)?;
             let mut array_values = Vec::with_capacity(count.into());
             for i in 0..count {
-                array_values.push(read_annotation_element_value(bytes, ix, pool).map_err(|e| format!("{} array index {} for", e, i))?);
+                array_values.push(read_annotation_element_value(bytes, ix, pool).map_err(|e| err!(e, "array index {} for", i))?);
             }
             AnnotationElementValue::ArrayValue(array_values)
         }
-        v => return Err(format!("Unrecognized discriminant {} for", v)),
+        v => fail!("Unrecognized discriminant {} for", v),
     };
     Ok(value)
 }
 
-fn read_annotation<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Annotation<'a>, String> {
-    let type_descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} type descriptor field of", e))?;
+fn read_annotation<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Annotation<'a>, ParseError> {
+    let type_descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "type descriptor field of"))?;
     let element_count = read_u2(bytes, ix)?;
     let mut elements = Vec::with_capacity(element_count.into());
     for i in 0..element_count {
-        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of element {} of", e, i))?;
-        let value = read_annotation_element_value(bytes, ix, pool).map_err(|e| format!("{} value of element {} of", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of element {} of", i))?;
+        let value = read_annotation_element_value(bytes, ix, pool).map_err(|e| err!(e, "value of element {} of", i))?;
         elements.push(AnnotationElement {
             name,
             value,
@@ -549,23 +549,23 @@ fn read_annotation<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolE
     })
 }
 
-fn read_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Annotation<'a>>, String> {
+fn read_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Annotation<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut annotations = Vec::with_capacity(count.into());
     for i in 0..count {
-        annotations.push(read_annotation(bytes, ix, pool).map_err(|e| format!("{} annotation {}", e, i))?);
+        annotations.push(read_annotation(bytes, ix, pool).map_err(|e| err!(e, "annotation {}", i))?);
     }
     Ok(annotations)
 }
 
-fn read_parameter_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<ParameterAnnotation<'a>>, String> {
+fn read_parameter_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<ParameterAnnotation<'a>>, ParseError> {
     let count = read_u1(bytes, ix)?;
     let mut parameters = Vec::with_capacity(count.into());
     for i in 0..count {
         let annotation_count = read_u2(bytes, ix)?;
         let mut annotations = Vec::with_capacity(annotation_count.into());
         for j in 0..annotation_count {
-            annotations.push(read_annotation(bytes, ix, pool).map_err(|e| format!("{} annotation {} of parameter {}", e, j, i))?);
+            annotations.push(read_annotation(bytes, ix, pool).map_err(|e| err!(e, "annotation {} of parameter {}", j, i))?);
         }
         parameters.push(ParameterAnnotation {
             annotations,
@@ -574,7 +574,7 @@ fn read_parameter_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[R
     Ok(parameters)
 }
 
-fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<TypeAnnotation<'a>>, String> {
+fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<TypeAnnotation<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut annotations = Vec::with_capacity(count.into());
     for i in 0..count {
@@ -603,7 +603,7 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
             0x42 => TypeAnnotationTarget::Catch { exception_table_index: read_u2(bytes, ix)? },
             0x43 | 0x44 | 0x45 | 0x46 => TypeAnnotationTarget::Offset { offset: read_u2(bytes, ix)? },
             0x47 | 0x48 | 0x49 | 0x4A | 0x4B => TypeAnnotationTarget::TypeArgument { offset: read_u2(bytes, ix)?, type_argument_index: read_u1(bytes, ix)? },
-            v => return Err(format!("Unrecognized target type {} in type annotation {}", v, i)),
+            v => fail!("Unrecognized target type {} in type annotation {}", v, i),
         };
         let path_count = read_u1(bytes, ix)?;
         let mut target_path = Vec::with_capacity(path_count.into());
@@ -613,7 +613,7 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
                 1 => TypeAnnotationTargetPathKind::DeeperNested,
                 2 => TypeAnnotationTargetPathKind::WildcardTypeArgument,
                 3 => TypeAnnotationTargetPathKind::TypeArgument,
-                v => return Err(format!("Unrecognized path kind {} in path element {} of type annotation {}", v, j, i)),
+                v => fail!("Unrecognized path kind {} in path element {} of type annotation {}", v, j, i),
             };
             let argument_index = read_u1(bytes, ix)?;
             target_path.push(TypeAnnotationTargetPathEntry {
@@ -621,7 +621,7 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
                 argument_index,
             });
         }
-        let annotation = read_annotation(bytes, ix, pool).map_err(|e| format!("{} of type annotation {}", e, i))?;
+        let annotation = read_annotation(bytes, ix, pool).map_err(|e| err!(e, "of type annotation {}", i))?;
         annotations.push(TypeAnnotation {
             target_type,
             target_path,
@@ -631,15 +631,15 @@ fn read_type_annotation_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
     Ok(annotations)
 }
 
-fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<BootstrapMethodEntry<'a>>, String> {
+fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<BootstrapMethodEntry<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut bootstrapmethods = Vec::with_capacity(count.into());
     for i in 0..count {
-        let method = read_cp_methodhandle(bytes, ix, pool).map_err(|e| format!("{} method ref for bootstrap method {}", e, i))?;
+        let method = read_cp_methodhandle(bytes, ix, pool).map_err(|e| err!(e, "method ref for bootstrap method {}", i))?;
         let arg_count = read_u2(bytes, ix)?;
         let mut arguments = Vec::with_capacity(arg_count.into());
         for j in 0..arg_count {
-            let argument = read_cp_bootstrap_argument(bytes, ix, pool).map_err(|e| format!("{} argument {} of bootstrap method {}", e, j, i))?;
+            let argument = read_cp_bootstrap_argument(bytes, ix, pool).map_err(|e| err!(e, "argument {} of bootstrap method {}", j, i))?;
             arguments.push(argument);
         }
         bootstrapmethods.push(BootstrapMethodEntry {
@@ -650,12 +650,12 @@ fn read_bootstrapmethods_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     Ok(bootstrapmethods)
 }
 
-fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodParameterEntry<'a>>, String> {
+fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodParameterEntry<'a>>, ParseError> {
     let count = read_u1(bytes, ix)?;
     let mut methodparameters = Vec::with_capacity(count.into());
     for i in 0..count {
-        let name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} name of method parameter {}", e, i))?;
-        let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found on method parameter {}", i))?;
+        let name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| err!(e, "name of method parameter {}", i))?;
+        let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| err!("Invalid access flags found on method parameter {}", i))?;
         methodparameters.push(MethodParameterEntry {
             name,
             access_flags,
@@ -664,28 +664,28 @@ fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     Ok(methodparameters)
 }
 
-fn read_module_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<ModuleData<'a>, String> {
-    let name = read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name", e))?;
-    let access_flags = ModuleAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid access flags found"))?;
-    let version = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} version", e))?;
+fn read_module_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<ModuleData<'a>, ParseError> {
+    let name = read_cp_moduleinfo(bytes, ix, pool).map_err(|e| err!(e, "name"))?;
+    let access_flags = ModuleAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| err!("Invalid access flags found"))?;
+    let version = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| err!(e, "version"))?;
     let requires_count = read_u2(bytes, ix)?;
     let mut requires = Vec::with_capacity(requires_count.into());
     for i in 0..requires_count {
         requires.push(ModuleRequireEntry {
-            name: read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name of requires entry {}", e, i))?,
-            flags: ModuleRequiresFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid module requires flags for entry {}", i))?,
-            version: read_cp_utf8_opt(bytes, ix, pool).map_err(|e| format!("{} version of requires entry {}", e, i))?,
+            name: read_cp_moduleinfo(bytes, ix, pool).map_err(|e| err!(e, "name of requires entry {}", i))?,
+            flags: ModuleRequiresFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| err!("Invalid module requires flags for entry {}", i))?,
+            version: read_cp_utf8_opt(bytes, ix, pool).map_err(|e| err!(e, "version of requires entry {}", i))?,
         });
     }
     let exports_count = read_u2(bytes, ix)?;
     let mut exports = Vec::with_capacity(exports_count.into());
     for i in 0..exports_count {
-        let package_name = read_cp_packageinfo(bytes, ix, pool).map_err(|e| format!("{} package name of exports entry {}", e, i))?;
-        let flags = ModuleExportsFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid module exports flags for entry {}", i))?;
+        let package_name = read_cp_packageinfo(bytes, ix, pool).map_err(|e| err!(e, "package name of exports entry {}", i))?;
+        let flags = ModuleExportsFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| err!("Invalid module exports flags for entry {}", i))?;
         let exports_to_count = read_u2(bytes, ix)?;
         let mut exports_to = Vec::with_capacity(exports_to_count.into());
         for j in 0..exports_to_count {
-            exports_to.push(read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name of exports_to entry {} of exports entry {}", e, j, i))?);
+            exports_to.push(read_cp_moduleinfo(bytes, ix, pool).map_err(|e| err!(e, "name of exports_to entry {} of exports entry {}", j, i))?);
         }
         exports.push(ModuleExportsEntry {
             package_name,
@@ -696,12 +696,12 @@ fn read_module_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
     let opens_count = read_u2(bytes, ix)?;
     let mut opens = Vec::with_capacity(opens_count.into());
     for i in 0..opens_count {
-        let package_name = read_cp_packageinfo(bytes, ix, pool).map_err(|e| format!("{} package name of opens entry {}", e, i))?;
-        let flags = ModuleOpensFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| format!("Invalid module opens flags for entry {}", i))?;
+        let package_name = read_cp_packageinfo(bytes, ix, pool).map_err(|e| err!(e, "package name of opens entry {}", i))?;
+        let flags = ModuleOpensFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| err!("Invalid module opens flags for entry {}", i))?;
         let opens_to_count = read_u2(bytes, ix)?;
         let mut opens_to = Vec::with_capacity(opens_to_count.into());
         for j in 0..opens_to_count {
-            opens_to.push(read_cp_moduleinfo(bytes, ix, pool).map_err(|e| format!("{} name of opens_to entry {} of opens entry {}", e, j, i))?);
+            opens_to.push(read_cp_moduleinfo(bytes, ix, pool).map_err(|e| err!(e, "name of opens_to entry {} of opens entry {}", j, i))?);
         }
         opens.push(ModuleOpensEntry {
             package_name,
@@ -712,16 +712,16 @@ fn read_module_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
     let uses_count = read_u2(bytes, ix)?;
     let mut uses = Vec::with_capacity(uses_count.into());
     for i in 0..uses_count {
-        uses.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} name of uses entry {}", e, i))?);
+        uses.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "name of uses entry {}", i))?);
     }
     let provides_count = read_u2(bytes, ix)?;
     let mut provides = Vec::with_capacity(provides_count.into());
     for i in 0..provides_count {
-        let service_interface_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} service interface name of provides entry {}", e, i))?;
+        let service_interface_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "service interface name of provides entry {}", i))?;
         let provides_with_count = read_u2(bytes, ix)?;
         let mut provides_with = Vec::with_capacity(provides_with_count.into());
         for j in 0..provides_with_count {
-            provides_with.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} provides_with entry {} of provides entry {}", e, j, i))?);
+            provides_with.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "provides_with entry {} of provides entry {}", j, i))?);
         }
         provides.push(ModuleProvidesEntry {
             service_interface_name,
@@ -740,31 +740,31 @@ fn read_module_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
     })
 }
 
-fn read_modulepackages_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
+fn read_modulepackages_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut packages = Vec::with_capacity(count.into());
     for i in 0..count {
-        packages.push(read_cp_packageinfo(bytes, ix, pool).map_err(|e| format!("{} package name {}", e, i))?);
+        packages.push(read_cp_packageinfo(bytes, ix, pool).map_err(|e| err!(e, "package name {}", i))?);
     }
     Ok(packages)
 }
 
-fn read_nestmembers_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, String> {
+fn read_nestmembers_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut members = Vec::with_capacity(count.into());
     for i in 0..count {
-        members.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} class name {}", e, i))?);
+        members.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "class name {}", i))?);
     }
     Ok(members)
 }
 
-fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<RecordComponentEntry<'a>>, String> {
+fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<RecordComponentEntry<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut components = Vec::with_capacity(count.into());
     for i in 0..count {
-        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name of entry {}", e, i))?;
-        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} descriptor of entry {}", e, i))?;
-        let attributes = read_attributes(bytes, ix, pool).map_err(|e| format!("{} attributes of entry {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of entry {}", i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of entry {}", i))?;
+        let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "attributes of entry {}", i))?;
         components.push(RecordComponentEntry {
             name,
             descriptor,
@@ -774,137 +774,137 @@ fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
     Ok(components)
 }
 
-pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, String> {
+pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut attributes = Vec::with_capacity(count.into());
     for i in 0..count {
-        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} name field of attribute {}", e, i))?;
+        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name field of attribute {}", i))?;
         let length = read_u4(bytes, ix)? as usize;
         let expected_end_ix = *ix + length;
         if bytes.len() < expected_end_ix {
-            return Err(format!("Unexpected end of stream reading attributes at index {}", *ix));
+            fail!("Unexpected end of stream reading attributes at index {}", *ix);
         }
         let data = match name.deref() {
             "ConstantValue" => {
-                ensure_length(length, 2).map_err(|e| format!("{} ConstantValue attribute {}", e, i))?;
-                AttributeData::ConstantValue(read_cp_literalconstant(bytes, ix, pool).map_err(|e| format!("{} value field of ConstantValue attribute {}", e, i))?)
+                ensure_length(length, 2).map_err(|e| err!(e, "ConstantValue attribute {}", i))?;
+                AttributeData::ConstantValue(read_cp_literalconstant(bytes, ix, pool).map_err(|e| err!(e, "value field of ConstantValue attribute {}", i))?)
             }
             "Code" => {
-                let code_data = read_code_data(bytes, ix, pool).map_err(|e| format!("{} of Code attribute {}", e, i))?;
+                let code_data = read_code_data(bytes, ix, pool).map_err(|e| err!(e, "of Code attribute {}", i))?;
                 AttributeData::Code(code_data)
             }
             "StackMapTable" => {
-                let stackmaptable_data = read_stackmaptable_data(bytes, ix, pool).map_err(|e| format!("{} of StackMapTable attribute {}", e, i))?;
+                let stackmaptable_data = read_stackmaptable_data(bytes, ix, pool).map_err(|e| err!(e, "of StackMapTable attribute {}", i))?;
                 AttributeData::StackMapTable(stackmaptable_data)
             }
             "Exceptions" => {
-                let exceptions_data = read_exceptions_data(bytes, ix, pool).map_err(|e| format!("{} of Exceptions attribute {}", e, i))?;
+                let exceptions_data = read_exceptions_data(bytes, ix, pool).map_err(|e| err!(e, "of Exceptions attribute {}", i))?;
                 AttributeData::Exceptions(exceptions_data)
             }
             "InnerClasses" => {
-                let innerclasses_data = read_innerclasses_data(bytes, ix, pool).map_err(|e| format!("{} of InnerClasses attribute {}", e, i))?;
+                let innerclasses_data = read_innerclasses_data(bytes, ix, pool).map_err(|e| err!(e, "of InnerClasses attribute {}", i))?;
                 AttributeData::InnerClasses(innerclasses_data)
             }
             "EnclosingMethod" => {
-                ensure_length(length, 4).map_err(|e| format!("{} EnclosingMethod attribute {}", e, i))?;
-                let class_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} class info of EnclosingMethod attribute {}", e, i))?;
-                let method = read_cp_nameandtype_opt(bytes, ix, pool).map_err(|e| format!("{} method info of EnclosingMethod attribute {}", e, i))?;
+                ensure_length(length, 4).map_err(|e| err!(e, "EnclosingMethod attribute {}", i))?;
+                let class_name = read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "class info of EnclosingMethod attribute {}", i))?;
+                let method = read_cp_nameandtype_opt(bytes, ix, pool).map_err(|e| err!(e, "method info of EnclosingMethod attribute {}", i))?;
                 AttributeData::EnclosingMethod { class_name, method }
             }
             "Synthetic" => {
-                ensure_length(length, 0).map_err(|e| format!("{} Synthetic attribute {}", e, i))?;
+                ensure_length(length, 0).map_err(|e| err!(e, "Synthetic attribute {}", i))?;
                 AttributeData::Synthetic
             }
             "Signature" => {
-                ensure_length(length, 2).map_err(|e| format!("{} Signature attribute {}", e, i))?;
-                AttributeData::Signature(read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} signature field of Signature attribute {}", e, i))?)
+                ensure_length(length, 2).map_err(|e| err!(e, "Signature attribute {}", i))?;
+                AttributeData::Signature(read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "signature field of Signature attribute {}", i))?)
             }
             "SourceFile" => {
-                ensure_length(length, 2).map_err(|e| format!("{} SourceFile attribute {}", e, i))?;
-                AttributeData::SourceFile(read_cp_utf8(bytes, ix, pool).map_err(|e| format!("{} signature field of SourceFile attribute {}", e, i))?)
+                ensure_length(length, 2).map_err(|e| err!(e, "SourceFile attribute {}", i))?;
+                AttributeData::SourceFile(read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "signature field of SourceFile attribute {}", i))?)
             }
             "SourceDebugExtension" => {
                 let modified_utf8_data = &bytes[*ix .. *ix + length];
                 *ix += length;
-                let debug_str = cesu8::from_java_cesu8(modified_utf8_data).map_err(|e| format!("{} modified utf8 data of SourceDebugExtension attribute {}", e, i))?;
+                let debug_str = cesu8::from_java_cesu8(modified_utf8_data).map_err(|e| err!("{} modified utf8 data of SourceDebugExtension attribute {}", e, i))?;
                 AttributeData::SourceDebugExtension(debug_str)
             }
             "LineNumberTable" => {
-                let linenumber_data = read_linenumber_data(bytes, ix).map_err(|e| format!("{} of LineNumberTable attribute {}", e, i))?;
+                let linenumber_data = read_linenumber_data(bytes, ix).map_err(|e| err!(e, "of LineNumberTable attribute {}", i))?;
                 AttributeData::LineNumberTable(linenumber_data)
             }
             "LocalVariableTable" => {
-                let localvariable_data = read_localvariable_data(bytes, ix, pool).map_err(|e| format!("{} of LocalVariableTable attribute {}", e, i))?;
+                let localvariable_data = read_localvariable_data(bytes, ix, pool).map_err(|e| err!(e, "of LocalVariableTable attribute {}", i))?;
                 AttributeData::LocalVariableTable(localvariable_data)
             }
             "LocalVariableTypeTable" => {
-                let localvariabletype_data = read_localvariabletype_data(bytes, ix, pool).map_err(|e| format!("{} of LocalVariableTypeTable attribute {}", e, i))?;
+                let localvariabletype_data = read_localvariabletype_data(bytes, ix, pool).map_err(|e| err!(e, "of LocalVariableTypeTable attribute {}", i))?;
                 AttributeData::LocalVariableTypeTable(localvariabletype_data)
             }
             "Deprecated" => {
-                ensure_length(length, 0).map_err(|e| format!("{} Deprecated attribute {}", e, i))?;
+                ensure_length(length, 0).map_err(|e| err!(e, "Deprecated attribute {}", i))?;
                 AttributeData::Deprecated
             }
             "RuntimeVisibleAnnotations" => {
-                let annotation_data = read_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeVisibleAnnotations attribute {}", e, i))?;
+                let annotation_data = read_annotation_data(bytes, ix, pool).map_err(|e| err!(e, "of RuntimeVisibleAnnotations attribute {}", i))?;
                 AttributeData::RuntimeVisibleAnnotations(annotation_data)
             }
             "RuntimeInvisibleAnnotations" => {
-                let annotation_data = read_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleAnnotations attribute {}", e, i))?;
+                let annotation_data = read_annotation_data(bytes, ix, pool).map_err(|e| err!(e, "of RuntimeInvisibleAnnotations attribute {}", i))?;
                 AttributeData::RuntimeInvisibleAnnotations(annotation_data)
             }
             "RuntimeVisibleParameterAnnotations" => {
-                let annotation_data = read_parameter_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeVisibleParameterAnnotations attribute {}", e, i))?;
+                let annotation_data = read_parameter_annotation_data(bytes, ix, pool).map_err(|e| err!(e, "of RuntimeVisibleParameterAnnotations attribute {}", i))?;
                 AttributeData::RuntimeVisibleParameterAnnotations(annotation_data)
             }
             "RuntimeInvisibleParameterAnnotations" => {
-                let annotation_data = read_parameter_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleParameterAnnotations attribute {}", e, i))?;
+                let annotation_data = read_parameter_annotation_data(bytes, ix, pool).map_err(|e| err!(e, "of RuntimeInvisibleParameterAnnotations attribute {}", i))?;
                 AttributeData::RuntimeInvisibleParameterAnnotations(annotation_data)
             }
             "RuntimeVisibleTypeAnnotations" => {
-                let annotation_data = read_type_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeVisibleTypeAnnotations attribute {}", e, i))?;
+                let annotation_data = read_type_annotation_data(bytes, ix, pool).map_err(|e| err!(e, "of RuntimeVisibleTypeAnnotations attribute {}", i))?;
                 AttributeData::RuntimeVisibleTypeAnnotations(annotation_data)
             }
             "RuntimeInvisibleTypeAnnotations" => {
-                let annotation_data = read_type_annotation_data(bytes, ix, pool).map_err(|e| format!("{} of RuntimeInvisibleTypeAnnotations attribute {}", e, i))?;
+                let annotation_data = read_type_annotation_data(bytes, ix, pool).map_err(|e| err!(e, "of RuntimeInvisibleTypeAnnotations attribute {}", i))?;
                 AttributeData::RuntimeInvisibleTypeAnnotations(annotation_data)
             }
             "AnnotationDefault" => {
-                let element_value = read_annotation_element_value(bytes, ix, pool).map_err(|e| format!("{} of AnnotationDefault attribute {}", e, i))?;
+                let element_value = read_annotation_element_value(bytes, ix, pool).map_err(|e| err!(e, "of AnnotationDefault attribute {}", i))?;
                 AttributeData::AnnotationDefault(element_value)
             }
             "BootstrapMethods" => {
-                let bootstrapmethods_data = read_bootstrapmethods_data(bytes, ix, pool).map_err(|e| format!("{} of BootstrapMethods attribute {}", e, i))?;
+                let bootstrapmethods_data = read_bootstrapmethods_data(bytes, ix, pool).map_err(|e| err!(e, "of BootstrapMethods attribute {}", i))?;
                 AttributeData::BootstrapMethods(bootstrapmethods_data)
             }
             "MethodParameters" => {
-                let methodparameters_data = read_methodparameters_data(bytes, ix, pool).map_err(|e| format!("{} of MethodParameters attribute {}", e, i))?;
+                let methodparameters_data = read_methodparameters_data(bytes, ix, pool).map_err(|e| err!(e, "of MethodParameters attribute {}", i))?;
                 AttributeData::MethodParameters(methodparameters_data)
             }
             "Module" => {
-                let module_data = read_module_data(bytes, ix, pool).map_err(|e| format!("{} of Module attribute {}", e, i))?;
+                let module_data = read_module_data(bytes, ix, pool).map_err(|e| err!(e, "of Module attribute {}", i))?;
                 AttributeData::Module(module_data)
             }
             "ModulePackages" => {
-                let modulepackages_data = read_modulepackages_data(bytes, ix, pool).map_err(|e| format!("{} of ModulePackages attribute {}", e, i))?;
+                let modulepackages_data = read_modulepackages_data(bytes, ix, pool).map_err(|e| err!(e, "of ModulePackages attribute {}", i))?;
                 AttributeData::ModulePackages(modulepackages_data)
             }
             "ModuleMainClass" => {
-                ensure_length(length, 2).map_err(|e| format!("{} ModuleMainClass attribute {}", e, i))?;
-                let main_class = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} of ModuleMainClass attribute {}", e, i))?;
+                ensure_length(length, 2).map_err(|e| err!(e, "ModuleMainClass attribute {}", i))?;
+                let main_class = read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "of ModuleMainClass attribute {}", i))?;
                 AttributeData::ModuleMainClass(main_class)
             }
             "NestHost" => {
-                ensure_length(length, 2).map_err(|e| format!("{} NestHost attribute {}", e, i))?;
-                let host_class = read_cp_classinfo(bytes, ix, pool).map_err(|e| format!("{} of NestHost attribute {}", e, i))?;
+                ensure_length(length, 2).map_err(|e| err!(e, "NestHost attribute {}", i))?;
+                let host_class = read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "of NestHost attribute {}", i))?;
                 AttributeData::NestHost(host_class)
             }
             "NestMembers" => {
-                let nestmembers_data = read_nestmembers_data(bytes, ix, pool).map_err(|e| format!("{} of NestMembers attribute {}", e, i))?;
+                let nestmembers_data = read_nestmembers_data(bytes, ix, pool).map_err(|e| err!(e, "of NestMembers attribute {}", i))?;
                 AttributeData::NestMembers(nestmembers_data)
             }
             "Record" => {
-                let record_data = read_record_data(bytes, ix, pool).map_err(|e| format!("{} of Record attribute {}", e, i))?;
+                let record_data = read_record_data(bytes, ix, pool).map_err(|e| err!(e, "of Record attribute {}", i))?;
                 AttributeData::Record(record_data)
             }
             _ => {
@@ -913,7 +913,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             }
         };
         if expected_end_ix != *ix {
-            return Err(format!("Length mismatch when reading attribute {}", i));
+            fail!("Length mismatch when reading attribute {}", i);
         }
         attributes.push(AttributeInfo {
             name,

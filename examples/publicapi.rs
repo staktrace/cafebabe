@@ -23,7 +23,7 @@ fn main() {
                     println!("    {} {}", method.name, method.descriptor);
                 }
             }
-            Err(e) => eprintln!("Error: {:?} when parsing {:?}", e, arg),
+            Err(e) => eprintln!("Error: {} when parsing {:?}", e, arg),
         };
     }
 }

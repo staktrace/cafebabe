@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, read_u8, ParseError};
-use crate::names::{is_array_descriptor, is_binary_name, is_module_name, is_unqualified_name};
+use crate::names::{is_array_descriptor, is_binary_name, is_field_descriptor, is_method_descriptor, is_module_name, is_unqualified_name};
 
 #[derive(Debug)]
 pub(crate) enum ConstantPoolRef<'a> {
@@ -196,9 +196,21 @@ impl<'a> ConstantPoolEntry<'a> {
         match self {
             ConstantPoolEntry::ClassInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_classinfo_name()?),
             ConstantPoolEntry::String(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::FieldRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::MethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
+            ConstantPoolEntry::FieldRef(x, y) => Ok(
+                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? &&
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
+                y.borrow().get().validate_field_descriptor()?
+            ),
+            ConstantPoolEntry::MethodRef(x, y) => Ok(
+                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? &&
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
+                y.borrow().get().validate_method_descriptor()?
+            ),
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(
+                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? &&
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
+                y.borrow().get().validate_method_descriptor()?
+            ),
             ConstantPoolEntry::NameAndType(x, y) => Ok(
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)? &&
                 x.borrow().get().validate_unqualified_name()? &&
@@ -282,6 +294,42 @@ impl<'a> ConstantPoolEntry<'a> {
                 }
             }
             _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        }
+    }
+
+    fn validate_field_descriptor(&self) -> Result<bool, ParseError> {
+        match self {
+            ConstantPoolEntry::NameAndType(_, y) => {
+                // Call ensure_type to fail with an error rather than panicking if we happen to be
+                // in the process of validating a FieldRef constant pool entry whose NameAndType
+                // points to a later entry in the constant pool that hasn't been validated yet.
+                // assert on the bool because we should never get Ok(false).
+                assert!(y.ensure_type(ConstantPoolEntryTypes::UTF8)?);
+                if is_field_descriptor(&y.borrow().get().utf8()) {
+                    Ok(true)
+                } else {
+                    fail!("Invalid field descriptor")
+                }
+            }
+            _ => panic!("Attempting to get descriptor from non-NameAndType constant pool entry!"),
+        }
+    }
+
+    fn validate_method_descriptor(&self) -> Result<bool, ParseError> {
+        match self {
+            ConstantPoolEntry::NameAndType(_, y) => {
+                // Call ensure_type to fail with an error rather than panicking if we happen to be
+                // in the process of validating a [Interface]MethodRef constant pool entry whose NameAndType
+                // points to a later entry in the constant pool that hasn't been validated yet.
+                // assert on the bool because we should never get Ok(false).
+                assert!(y.ensure_type(ConstantPoolEntryTypes::UTF8)?);
+                if is_method_descriptor(&y.borrow().get().utf8()) {
+                    Ok(true)
+                } else {
+                    fail!("Invalid method descriptor")
+                }
+            }
+            _ => panic!("Attempting to get descriptor from non-NameAndType constant pool entry!"),
         }
     }
 

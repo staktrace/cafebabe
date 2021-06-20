@@ -4,6 +4,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, read_u8, ParseError};
+use crate::names::{is_binary_name, is_module_name, is_unqualified_name};
 
 #[derive(Debug)]
 pub(crate) enum ConstantPoolRef<'a> {
@@ -193,12 +194,14 @@ impl<'a> ConstantPoolEntry<'a> {
 
     fn validate(&self, major_version: u16) -> Result<bool, ParseError> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::ClassInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_binary_name()?),
             ConstantPoolEntry::String(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
             ConstantPoolEntry::FieldRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
             ConstantPoolEntry::MethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
             ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && y.ensure_type(ConstantPoolEntryTypes::UTF8)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? &&
+                                                       x.borrow().get().validate_unqualified_name()? &&
+                                                       y.ensure_type(ConstantPoolEntryTypes::UTF8)?),
             ConstantPoolEntry::MethodHandle(x, y) => y.ensure_type(match x {
                 ReferenceKind::GetField |
                 ReferenceKind::GetStatic |
@@ -213,8 +216,8 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::MethodType(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
             ConstantPoolEntry::Dynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
-            ConstantPoolEntry::ModuleInfo(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::PackageInfo(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
+            ConstantPoolEntry::ModuleInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_module_name()?),
+            ConstantPoolEntry::PackageInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_binary_name()?),
             _ => Ok(true),
         }
     }
@@ -224,6 +227,45 @@ impl<'a> ConstantPoolEntry<'a> {
             Ok(true)
         } else {
             fail!("Unexpected constant pool reference type")
+        }
+    }
+
+    fn validate_binary_name(&self) -> Result<bool, ParseError> {
+        match self {
+            ConstantPoolEntry::Utf8(x) => {
+                if is_binary_name(x) {
+                    Ok(true)
+                } else {
+                    fail!("Invalid binary name")
+                }
+            }
+            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        }
+    }
+
+    fn validate_unqualified_name(&self) -> Result<bool, ParseError> {
+        match self {
+            ConstantPoolEntry::Utf8(x) => {
+                if is_unqualified_name(x, true, false) {
+                    Ok(true)
+                } else {
+                    fail!("Invalid unqualified name")
+                }
+            }
+            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        }
+    }
+
+    fn validate_module_name(&self) -> Result<bool, ParseError> {
+        match self {
+            ConstantPoolEntry::Utf8(x) => {
+                if is_module_name(x) {
+                    Ok(true)
+                } else {
+                    fail!("Invalid module name")
+                }
+            }
+            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
         }
     }
 
@@ -396,7 +438,8 @@ fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Res
 
 fn validate_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>], major_version: u16) -> Result<(), ParseError> {
     for (i, cp_entry) in constant_pool.iter().enumerate() {
-        cp_entry.validate(major_version).map_err(|e| err!(e, "constant pool entry {}", i))?;
+        let valid = cp_entry.validate(major_version).map_err(|e| err!(e, "constant pool entry {}", i))?;
+        assert!(valid); // validate functions should never return Ok(false)
     }
     Ok(())
 }

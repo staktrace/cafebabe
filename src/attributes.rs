@@ -7,6 +7,7 @@ use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, Meth
 use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
     read_cp_literalconstant, read_cp_integer, read_cp_float, read_cp_long, read_cp_double, read_cp_methodhandle,
     read_cp_bootstrap_argument, read_cp_moduleinfo, read_cp_packageinfo};
+use crate::names::is_unqualified_name;
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -471,6 +472,9 @@ fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name for variable {}", i))?;
+        if !is_unqualified_name(&name, false, false) {
+            fail!("Invalid unqualified name for variable {}", i);
+        }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor for variable {}", i))?;
         let index = read_u2(bytes, ix)?;
         localvariables.push(LocalVariableEntry {
@@ -491,6 +495,9 @@ fn read_localvariabletype_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<C
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name for variable {}", i))?;
+        if !is_unqualified_name(&name, false, false) {
+            fail!("Invalid unqualified name for variable {}", i);
+        }
         let signature = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "signature for variable {}", i))?;
         let index = read_u2(bytes, ix)?;
         localvariabletypes.push(LocalVariableTypeEntry {
@@ -655,6 +662,9 @@ fn read_methodparameters_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
     let mut methodparameters = Vec::with_capacity(count.into());
     for i in 0..count {
         let name = read_cp_utf8_opt(bytes, ix, pool).map_err(|e| err!(e, "name of method parameter {}", i))?;
+        if name.is_some() && !is_unqualified_name(name.as_ref().unwrap(), false, false) {
+            fail!("Invalid unqualified name for variable {}", i);
+        }
         let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?).ok_or_else(|| err!(("Invalid access flags found"), ("method parameter {}", i)))?;
         methodparameters.push(MethodParameterEntry {
             name,
@@ -763,6 +773,9 @@ fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
     let mut components = Vec::with_capacity(count.into());
     for i in 0..count {
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of entry {}", i))?;
+        if !is_unqualified_name(&name, false, false) {
+            fail!("Invalid unqualified name for entry {}", i);
+        }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of entry {}", i))?;
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "entry {}", i))?;
         components.push(RecordComponentEntry {

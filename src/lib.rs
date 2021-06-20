@@ -7,6 +7,7 @@ pub mod error;
 
 pub mod attributes;
 pub mod constant_pool;
+pub mod names;
 
 use std::borrow::Cow;
 use std::ops::Deref;
@@ -15,6 +16,7 @@ use std::rc::Rc;
 pub use crate::error::ParseError;
 use crate::attributes::{AttributeData, AttributeInfo, read_attributes};
 use crate::constant_pool::{ConstantPoolEntry, ConstantPoolIter, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
+use crate::names::is_unqualified_name;
 
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     if bytes.len() < *ix + 1 {
@@ -131,6 +133,9 @@ fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class field {}", i))?;
+        if !is_unqualified_name(&name, false, false) {
+            fail!("Invalid unqualified name for class field {}", i);
+        }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of class field {}", i))?;
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class field {}", i))?;
         fields.push(FieldInfo {
@@ -168,12 +173,16 @@ pub struct MethodInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<MethodInfo<'a>>, ParseError> {
+fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], in_interface: bool) -> Result<Vec<MethodInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
     for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class method {}", i))?;
+        let allow_init = !in_interface;
+        if !is_unqualified_name(&name, allow_init, true) {
+            fail!("Invalid unqualified name for class method {}", i);
+        }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of class method {}", i))?;
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class method {}", i))?;
         methods.push(MethodInfo {
@@ -270,7 +279,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError>
     let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "super_class"))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
-    let methods = read_methods(raw_bytes, &mut ix, &constant_pool)?;
+    let methods = read_methods(raw_bytes, &mut ix, &constant_pool, access_flags.contains(ClassAccessFlags::INTERFACE))?;
     let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "class"))?;
     // Section 4.8 "Format Checking" says the class file must not have extra bytes at the end
     if ix != raw_bytes.len() {

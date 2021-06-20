@@ -199,9 +199,11 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::FieldRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
             ConstantPoolEntry::MethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
             ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? &&
-                                                       x.borrow().get().validate_unqualified_name()? &&
-                                                       y.ensure_type(ConstantPoolEntryTypes::UTF8)?),
+            ConstantPoolEntry::NameAndType(x, y) => Ok(
+                x.ensure_type(ConstantPoolEntryTypes::UTF8)? &&
+                x.borrow().get().validate_unqualified_name()? &&
+                y.ensure_type(ConstantPoolEntryTypes::UTF8)?
+            ),
             ConstantPoolEntry::MethodHandle(x, y) => y.ensure_type(match x {
                 ReferenceKind::GetField |
                 ReferenceKind::GetStatic |

@@ -272,6 +272,10 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError>
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
     let methods = read_methods(raw_bytes, &mut ix, &constant_pool)?;
     let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "class"))?;
+    // Section 4.8 "Format Checking" says the class file must not have extra bytes at the end
+    if ix != raw_bytes.len() {
+        fail!("Extra bytes found at index {} after reading class file", ix);
+    }
 
     if is_module {
         if super_class.is_some() {

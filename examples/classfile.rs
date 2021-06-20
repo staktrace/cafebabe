@@ -9,7 +9,7 @@ fn main() {
         file.read_to_end(&mut bytes).unwrap();
         println!("Parsing {:?}...", arg);
         match cafebabe::parse_class(&bytes) {
-            Ok(class) => println!("Successfully parsed {:?}", class.this_class),
+            Ok(class) => println!("Successfully parsed {:?}\n{:#?}", class.this_class, class),
             Err(e) => println!("Error: {}", e),
         };
     }

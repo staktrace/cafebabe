@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, read_u8, ParseError};
-use crate::names::{is_binary_name, is_module_name, is_unqualified_name};
+use crate::names::{is_array_descriptor, is_binary_name, is_module_name, is_unqualified_name};
 
 #[derive(Debug)]
 pub(crate) enum ConstantPoolRef<'a> {
@@ -194,7 +194,7 @@ impl<'a> ConstantPoolEntry<'a> {
 
     fn validate(&self, major_version: u16) -> Result<bool, ParseError> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_binary_name()?),
+            ConstantPoolEntry::ClassInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_classinfo_name()?),
             ConstantPoolEntry::String(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
             ConstantPoolEntry::FieldRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
             ConstantPoolEntry::MethodRef(x, y) => Ok(x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? && y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?),
@@ -227,6 +227,20 @@ impl<'a> ConstantPoolEntry<'a> {
             Ok(true)
         } else {
             fail!("Unexpected constant pool reference type")
+        }
+    }
+
+    fn validate_classinfo_name(&self) -> Result<bool, ParseError> {
+        match self {
+            ConstantPoolEntry::Utf8(x) => {
+                // Per 4.4.1, classinfo names are allowed to be array descriptors too. This happens in the java 16 modules file.
+                if is_binary_name(x) || is_array_descriptor(x) {
+                    Ok(true)
+                } else {
+                    fail!("Invalid binary name")
+                }
+            }
+            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
         }
     }
 

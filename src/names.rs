@@ -1,3 +1,5 @@
+use std::str::Chars;
+
 pub(crate) fn is_binary_name(name: &str) -> bool {
     for segment in name.split('/') {
         if !is_unqualified_name(segment, false, false) {
@@ -45,4 +47,81 @@ pub(crate) fn is_module_name(name: &str) -> bool {
         };
     }
     true
+}
+
+fn consume_unqualified_segment(chars: &mut Chars) -> Option<char> {
+    let mut first = true;
+    while let Some(c) = chars.next() {
+        match c {
+            '/' if first => return None,
+            ';' if first => return None,
+            '/' | ';' => return Some(c),
+            '.' | '[' | '<' | '>' => return None,
+            _ => first = false,
+        };
+    }
+    None
+}
+
+fn consume_class_descriptor(chars: &mut Chars) -> bool {
+    loop {
+        match consume_unqualified_segment(chars) {
+            None => return false,
+            Some(';') => return true,
+            Some('/') => continue,
+            _ => panic!("Got unexpected return value from consume_unqualified_segment"),
+        };
+    }
+}
+
+pub(crate) fn is_field_descriptor(name: &str) -> bool {
+    if name.len() == 0 {
+        return false;
+    }
+    let mut dimensions = 0;
+    let mut chars = name.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '[' => {
+                dimensions += 1;
+                if dimensions > 255 {
+                    return false;
+                }
+                continue;
+            }
+            'B' | 'C' | 'D' | 'F' | 'I' | 'J' | 'S' | 'Z' => (),
+            'L' => {
+                if !consume_class_descriptor(&mut chars) {
+                    return false;
+                }
+            }
+            _ => return false,
+        };
+        break;
+    }
+    chars.next().is_none()
+}
+
+pub(crate) fn is_array_descriptor(name: &str) -> bool {
+    is_field_descriptor(name) && name.as_bytes()[0] == b'['
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_descriptors() {
+        assert!(is_field_descriptor("I"));
+        assert!(is_field_descriptor("[Ljava;"));
+        assert!(is_field_descriptor("[Ljava/lang/Object;"));
+        assert!(is_field_descriptor("[[Z"));
+        assert!(!is_field_descriptor("M"));
+        assert!(!is_field_descriptor("[[L;"));
+        assert!(!is_field_descriptor("[[Ljava/;"));
+        assert!(!is_field_descriptor("[[L/java;"));
+        assert!(!is_field_descriptor("[[Ljava"));
+        assert!(!is_field_descriptor("[[Ljava/lang/Object;stuff"));
+        assert!(!is_field_descriptor("Istuff"));
+    }
 }

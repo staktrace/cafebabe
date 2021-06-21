@@ -16,7 +16,7 @@ use std::rc::Rc;
 pub use crate::error::ParseError;
 use crate::attributes::{AttributeData, AttributeInfo, read_attributes};
 use crate::constant_pool::{ConstantPoolEntry, ConstantPoolIter, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
-use crate::names::is_unqualified_name;
+use crate::names::{is_field_descriptor, is_method_descriptor, is_unqualified_name};
 
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     if bytes.len() < *ix + 1 {
@@ -137,6 +137,9 @@ fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry
             fail!("Invalid unqualified name for class field {}", i);
         }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of class field {}", i))?;
+        if !is_field_descriptor(&descriptor) {
+            fail!("Invalid descriptor for class field {}", i);
+        }
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class field {}", i))?;
         fields.push(FieldInfo {
             access_flags,
@@ -173,7 +176,7 @@ pub struct MethodInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], in_interface: bool) -> Result<Vec<MethodInfo<'a>>, ParseError> {
+fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], in_interface: bool, major_version: u16) -> Result<Vec<MethodInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
     for i in 0..count {
@@ -184,6 +187,20 @@ fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntr
             fail!("Invalid unqualified name for class method {}", i);
         }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of class method {}", i))?;
+        if !is_method_descriptor(&descriptor) {
+            fail!("Invalid descriptor for class method {}", i);
+        }
+        if allow_init && name == "<init>" && !descriptor.ends_with('V') {
+            fail!("Non-void method descriptor for init method {}", i);
+        }
+        if name == "<clinit>" {
+            if !descriptor.ends_with('V') {
+                fail!("Non-void method descriptor for clinit method {}", i);
+            }
+            if major_version >= 51 && !descriptor.starts_with("()") {
+                fail!("Arguments found in descriptor for clinit method {}", i);
+            }
+        }
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class method {}", i))?;
         methods.push(MethodInfo {
             access_flags,
@@ -279,7 +296,7 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError>
     let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "super_class"))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
-    let methods = read_methods(raw_bytes, &mut ix, &constant_pool, access_flags.contains(ClassAccessFlags::INTERFACE))?;
+    let methods = read_methods(raw_bytes, &mut ix, &constant_pool, access_flags.contains(ClassAccessFlags::INTERFACE), major_version)?;
     let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "class"))?;
     // Section 4.8 "Format Checking" says the class file must not have extra bytes at the end
     if ix != raw_bytes.len() {

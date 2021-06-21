@@ -215,6 +215,7 @@ impl<'a> ConstantPoolEntry<'a> {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)? &&
                 x.borrow().get().validate_unqualified_name()? &&
                 y.ensure_type(ConstantPoolEntryTypes::UTF8)?
+                // y is validated as part of FieldRef/MethodRef/InterfaceMethodRef/Dynamic/InvokeDynamic pool item validation
             ),
             ConstantPoolEntry::MethodHandle(x, y) => y.ensure_type(match x {
                 ReferenceKind::GetField |
@@ -227,9 +228,15 @@ impl<'a> ConstantPoolEntry<'a> {
                 ReferenceKind::InvokeSpecial => if major_version < 52 { ConstantPoolEntryTypes::METHOD_REF } else { ConstantPoolEntryTypes::NEW_METHOD_REFS },
                 ReferenceKind::InvokeInterface => ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
             }),
-            ConstantPoolEntry::MethodType(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::Dynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
-            ConstantPoolEntry::InvokeDynamic(_, y) => y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE),
+            ConstantPoolEntry::MethodType(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_method_descriptor()?),
+            ConstantPoolEntry::Dynamic(_, y) => Ok(
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
+                y.borrow().get().validate_field_descriptor()?
+            ),
+            ConstantPoolEntry::InvokeDynamic(_, y) => Ok(
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
+                y.borrow().get().validate_method_descriptor()?
+            ),
             ConstantPoolEntry::ModuleInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_module_name()?),
             ConstantPoolEntry::PackageInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_binary_name()?),
             _ => Ok(true),
@@ -323,7 +330,10 @@ impl<'a> ConstantPoolEntry<'a> {
                 // points to a later entry in the constant pool that hasn't been validated yet.
                 // assert on the bool because we should never get Ok(false).
                 assert!(y.ensure_type(ConstantPoolEntryTypes::UTF8)?);
-                if is_method_descriptor(&y.borrow().get().utf8()) {
+                y.borrow().get().validate_method_descriptor()
+            }
+            ConstantPoolEntry::Utf8(x) => {
+                if is_method_descriptor(&x) {
                     Ok(true)
                 } else {
                     fail!("Invalid method descriptor")

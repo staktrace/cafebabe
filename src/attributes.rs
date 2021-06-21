@@ -7,7 +7,7 @@ use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, Meth
 use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
     read_cp_literalconstant, read_cp_integer, read_cp_float, read_cp_long, read_cp_double, read_cp_methodhandle,
     read_cp_bootstrap_argument, read_cp_moduleinfo, read_cp_packageinfo};
-use crate::names::is_unqualified_name;
+use crate::names::{is_field_descriptor, is_return_descriptor, is_unqualified_name};
 
 #[derive(Debug)]
 pub struct ExceptionTableEntry<'a> {
@@ -476,6 +476,9 @@ fn read_localvariable_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Const
             fail!("Invalid unqualified name for variable {}", i);
         }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor for variable {}", i))?;
+        if !is_field_descriptor(&descriptor) {
+            fail!("Invalid descriptor for variable {}", i);
+        }
         let index = read_u2(bytes, ix)?;
         localvariables.push(LocalVariableEntry {
             start_pc,
@@ -522,8 +525,21 @@ fn read_annotation_element_value<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc
         'S' => AnnotationElementValue::ShortConstant(read_cp_integer(bytes, ix, pool)?),
         'Z' => AnnotationElementValue::BooleanConstant(read_cp_integer(bytes, ix, pool)?),
         's' => AnnotationElementValue::StringConstant(read_cp_utf8(bytes, ix, pool)?),
-        'e' => AnnotationElementValue::EnumConstant { type_name: read_cp_utf8(bytes, ix, pool)?, const_name: read_cp_utf8(bytes, ix, pool)? },
-        'c' => AnnotationElementValue::ClassLiteral { class_name: read_cp_utf8(bytes, ix, pool)? },
+        'e' => {
+            let type_name = read_cp_utf8(bytes, ix, pool)?;
+            if !is_field_descriptor(&type_name) {
+                fail!("Invalid enum descriptor");
+            }
+            let const_name = read_cp_utf8(bytes, ix, pool)?;
+            AnnotationElementValue::EnumConstant { type_name, const_name }
+        }
+        'c' => {
+            let class_name = read_cp_utf8(bytes, ix, pool)?;
+            if !is_return_descriptor(&class_name) {
+                fail!("Invalid classinfo descriptor");
+            }
+            AnnotationElementValue::ClassLiteral { class_name }
+        }
         '@' => AnnotationElementValue::AnnotationValue(read_annotation(bytes, ix, pool)?),
         '[' => {
             let count = read_u2(bytes, ix)?;
@@ -540,6 +556,9 @@ fn read_annotation_element_value<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc
 
 fn read_annotation<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Annotation<'a>, ParseError> {
     let type_descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "type descriptor field"))?;
+    if !is_field_descriptor(&type_descriptor) {
+        fail!("Invalid descriptor");
+    }
     let element_count = read_u2(bytes, ix)?;
     let mut elements = Vec::with_capacity(element_count.into());
     for i in 0..element_count {
@@ -777,6 +796,9 @@ fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
             fail!("Invalid unqualified name for entry {}", i);
         }
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of entry {}", i))?;
+        if !is_field_descriptor(&descriptor) {
+            fail!("Invalid descriptor for entry {}", i);
+        }
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "entry {}", i))?;
         components.push(RecordComponentEntry {
             name,
@@ -830,6 +852,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
             }
             "Signature" => {
                 ensure_length(length, 2).map_err(|e| err!(e, "Signature attribute {}", i))?;
+                // TODO: validate signature
                 AttributeData::Signature(read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "signature field of Signature attribute {}", i))?)
             }
             "SourceFile" => {

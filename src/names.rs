@@ -138,6 +138,15 @@ pub(crate) fn is_method_descriptor(name: &str) -> bool {
     }
 }
 
+pub(crate) fn is_return_descriptor(name: &str) -> bool {
+    let mut chars = name.chars();
+    match consume_field_descriptor(&mut chars) {
+        (false, Some('V')) => chars.next().is_none(),
+        (false, _) => false,
+        (true, _) => chars.next().is_none(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

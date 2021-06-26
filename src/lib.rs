@@ -10,6 +10,7 @@ pub mod constant_pool;
 pub mod names;
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -130,6 +131,7 @@ pub struct FieldInfo<'a> {
 fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut fields = Vec::with_capacity(count.into());
+    let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class field {}", i))?;
@@ -139,6 +141,10 @@ fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry
         let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of class field {}", i))?;
         if !is_field_descriptor(&descriptor) {
             fail!("Invalid descriptor for class field {}", i);
+        }
+        let unique_id = (name.clone(), descriptor.clone());
+        if !unique_ids.insert(unique_id) {
+            fail!("Class field {} is duplicate of previously-encountered field", i);
         }
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class field {}", i))?;
         fields.push(FieldInfo {
@@ -179,6 +185,7 @@ pub struct MethodInfo<'a> {
 fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], in_interface: bool, major_version: u16) -> Result<Vec<MethodInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
+    let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
     for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class method {}", i))?;
@@ -200,6 +207,10 @@ fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntr
             if major_version >= 51 && !descriptor.starts_with("()") {
                 fail!("Arguments found in descriptor for clinit method {}", i);
             }
+        }
+        let unique_id = (name.clone(), descriptor.clone());
+        if !unique_ids.insert(unique_id) {
+            fail!("Class method {} is duplicate of previously-encountered method", i);
         }
         let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class method {}", i))?;
         methods.push(MethodInfo {

@@ -31,11 +31,8 @@ Current status
 The main parsing code is fully implemented. All structures (including attributes) described in Chapter 4 of the JVM spec are supported.
 The entire `modules` file of the OpenJDK 16 distribution can be parsed without errors.
 `cafebabe` will do some kinds of validation/checking at parse time, but not everything described in Chapter 4 of the JVM spec.
-It does all of section 4.8 validation ("Format checking") except the following known omissions:
-- Uniqueness of class fields
-- Uniqueness of class methods
-- Signature attribute validation
-A reasonable goal for this project is to fully implement section 4.8.
+It does all of section 4.8 validation ("Format checking") except possibly some of the attribute validations (the Signature attribute, for instance).
+A reasonable goal for this project is to fully implement section 4.8, so patches would be accepted for additional format checking.
 
 Q&A
 ---

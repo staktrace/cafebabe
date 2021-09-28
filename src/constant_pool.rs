@@ -23,9 +23,6 @@ impl<'a> ConstantPoolRef<'a> {
                 if target >= pool.len() {
                     fail!("Constant pool entry at index {} references out-of-bounds index {}", my_index, target);
                 }
-                if !pool[target].is_resolved() {
-                    return Ok(false);
-                }
                 *self = ConstantPoolRef::Resolved(pool[target].clone());
                 Ok(true)
             }

@@ -491,18 +491,9 @@ fn read_constant_package<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Constant
 }
 
 fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
-    let mut resolved_count = 0;
-    while resolved_count < constant_pool.len() {
-        let mut count = 0;
-        for (i, cp_entry) in constant_pool.iter().enumerate() {
-            if cp_entry.resolve(i, &constant_pool)? {
-                count += 1;
-            }
-        }
-        if count == resolved_count {
-            fail!("Unable to resolve all constant pool entries");
-        }
-        resolved_count = count;
+    for (i, cp_entry) in constant_pool.iter().enumerate() {
+        let resolved = cp_entry.resolve(i, &constant_pool)?;
+	assert!(resolved); // resolve() now always returns true
     }
     Ok(())
 }

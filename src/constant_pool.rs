@@ -13,7 +13,7 @@ pub(crate) enum ConstantPoolRef<'a> {
 }
 
 impl<'a> ConstantPoolRef<'a> {
-    fn resolve(&mut self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, ParseError> {
+    fn resolve(&mut self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
         match self {
             ConstantPoolRef::Unresolved(ix) => {
                 let target = *ix as usize;
@@ -24,9 +24,9 @@ impl<'a> ConstantPoolRef<'a> {
                     fail!("Constant pool entry at index {} references out-of-bounds index {}", my_index, target);
                 }
                 *self = ConstantPoolRef::Resolved(pool[target].clone());
-                Ok(true)
+                Ok(())
             }
-            ConstantPoolRef::Resolved(_) => Ok(true),
+            ConstantPoolRef::Resolved(_) => Ok(()),
         }
     }
 
@@ -39,12 +39,12 @@ impl<'a> ConstantPoolRef<'a> {
 }
 
 trait RefCellDeref<'a> {
-    fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, ParseError>;
+    fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError>;
     fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, ParseError>;
 }
 
 impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
-    fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, ParseError> {
+    fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
         self.borrow_mut().resolve(cp_index, pool)
     }
 
@@ -121,21 +121,21 @@ pub(crate) enum ConstantPoolEntry<'a> {
 }
 
 impl<'a> ConstantPoolEntry<'a> {
-    fn resolve(&self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<bool, ParseError> {
+    fn resolve(&self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
         match self {
             ConstantPoolEntry::ClassInfo(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::String(x) => x.resolve(my_index, pool),
-            ConstantPoolEntry::FieldRef(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
-            ConstantPoolEntry::MethodRef(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(x.resolve(my_index, pool)? && y.resolve(my_index, pool)?),
+            ConstantPoolEntry::FieldRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
+            ConstantPoolEntry::MethodRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
+            ConstantPoolEntry::NameAndType(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
             ConstantPoolEntry::MethodHandle(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::MethodType(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::Dynamic(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::PackageInfo(x) => x.resolve(my_index, pool),
-            _ => Ok(true),
+            _ => Ok(()),
         }
     }
 
@@ -467,8 +467,7 @@ fn read_constant_package<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Constant
 
 fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
     for (i, cp_entry) in constant_pool.iter().enumerate() {
-        let resolved = cp_entry.resolve(i, &constant_pool)?;
-	assert!(resolved); // resolve() now always returns true
+        cp_entry.resolve(i, &constant_pool)?;
     }
     Ok(())
 }

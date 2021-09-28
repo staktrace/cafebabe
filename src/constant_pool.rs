@@ -30,13 +30,6 @@ impl<'a> ConstantPoolRef<'a> {
         }
     }
 
-    fn is_resolved(&self) -> bool {
-        match self {
-            ConstantPoolRef::Unresolved(_) => false,
-            ConstantPoolRef::Resolved(_) => true,
-        }
-    }
-
     fn get(&self) -> &Rc<ConstantPoolEntry<'a>> {
         match self {
             ConstantPoolRef::Unresolved(_) => panic!("Called get on a unresolved ConstantPoolRef"),
@@ -143,24 +136,6 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::PackageInfo(x) => x.resolve(my_index, pool),
             _ => Ok(true),
-        }
-    }
-
-    fn is_resolved(&self) -> bool {
-        match self {
-            ConstantPoolEntry::ClassInfo(x) => x.borrow().is_resolved(),
-            ConstantPoolEntry::String(x) => x.borrow().is_resolved(),
-            ConstantPoolEntry::FieldRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
-            ConstantPoolEntry::MethodRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
-            ConstantPoolEntry::NameAndType(x, y) => x.borrow().is_resolved() && y.borrow().is_resolved(),
-            ConstantPoolEntry::MethodHandle(_, y) => y.borrow().is_resolved(),
-            ConstantPoolEntry::MethodType(x) => x.borrow().is_resolved(),
-            ConstantPoolEntry::Dynamic(_, y) => y.borrow().is_resolved(),
-            ConstantPoolEntry::InvokeDynamic(_, y) => y.borrow().is_resolved(),
-            ConstantPoolEntry::ModuleInfo(x) => x.borrow().is_resolved(),
-            ConstantPoolEntry::PackageInfo(x) => x.borrow().is_resolved(),
-            _ => true,
         }
     }
 

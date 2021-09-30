@@ -17,12 +17,7 @@ pub(crate) fn is_unqualified_name(name: &str, allow_init: bool, allow_clinit: bo
         Some(x) if !is_valid_unqualified_char(x) => return false,
         Some(_) => (),
     };
-    for x in chars {
-        if !is_valid_unqualified_char(x) {
-            return false;
-        }
-    }
-    true
+    chars.all(is_valid_unqualified_char)
 }
 
 fn is_valid_unqualified_char(c: char) -> bool {

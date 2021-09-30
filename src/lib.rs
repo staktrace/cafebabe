@@ -286,7 +286,7 @@ impl<'a> ClassFile<'a> {
 
 pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError> {
     let mut ix = 0;
-    if read_u4(raw_bytes, &mut ix)? != 0xCAFEBABE {
+    if read_u4(raw_bytes, &mut ix)? != 0xCAFE_BABE {
         fail!("Unexpected magic header");
     }
     let minor_version = read_u2(raw_bytes, &mut ix)?;

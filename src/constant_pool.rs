@@ -68,25 +68,25 @@ pub enum ReferenceKind {
 
 bitflags! {
     pub(crate) struct ConstantPoolEntryTypes: u32 {
-        const ZERO = 0x00000001;
-        const UTF8 = 0x00000002;
-        const INTEGER = 0x00000004;
-        const FLOAT = 0x00000008;
-        const LONG = 0x00000010;
-        const DOUBLE = 0x00000020;
-        const CLASS_INFO = 0x00000040;
-        const STRING = 0x00000080;
-        const FIELD_REF = 0x00000100;
-        const METHOD_REF = 0x00000200;
-        const INTERFACE_METHOD_REF = 0x00000400;
-        const NAME_AND_TYPE = 0x00000800;
-        const METHOD_HANDLE = 0x00001000;
-        const METHOD_TYPE = 0x00002000;
-        const DYNAMIC = 0x00004000;
-        const INVOKE_DYNAMIC = 0x00008000;
-        const MODULE_INFO = 0x00010000;
-        const PACKAGE_INFO = 0x00020000;
-        const UNUSED = 0x00040000;
+        const ZERO = 0x0000_0001;
+        const UTF8 = 0x0000_0002;
+        const INTEGER = 0x0000_0004;
+        const FLOAT = 0x0000_0008;
+        const LONG = 0x0000_0010;
+        const DOUBLE = 0x0000_0020;
+        const CLASS_INFO = 0x0000_0040;
+        const STRING = 0x0000_0080;
+        const FIELD_REF = 0x0000_0100;
+        const METHOD_REF = 0x0000_0200;
+        const INTERFACE_METHOD_REF = 0x0000_0400;
+        const NAME_AND_TYPE = 0x0000_0800;
+        const METHOD_HANDLE = 0x0000_1000;
+        const METHOD_TYPE = 0x0000_2000;
+        const DYNAMIC = 0x0000_4000;
+        const INVOKE_DYNAMIC = 0x0000_8000;
+        const MODULE_INFO = 0x0001_0000;
+        const PACKAGE_INFO = 0x0002_0000;
+        const UNUSED = 0x0004_0000;
 
         const NEW_METHOD_REFS = Self::METHOD_REF.bits() | Self::INTERFACE_METHOD_REF.bits();
         const CONSTANTS = Self::INTEGER.bits() | Self::FLOAT.bits() | Self::LONG.bits() | Self::DOUBLE.bits() | Self::STRING.bits();

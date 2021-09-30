@@ -465,14 +465,14 @@ fn read_constant_package<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Constant
     Ok(ConstantPoolEntry::PackageInfo(name_ref))
 }
 
-fn resolve_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
+fn resolve_constant_pool(constant_pool: &[Rc<ConstantPoolEntry>]) -> Result<(), ParseError> {
     for (i, cp_entry) in constant_pool.iter().enumerate() {
         cp_entry.resolve(i, &constant_pool)?;
     }
     Ok(())
 }
 
-fn validate_constant_pool<'a>(constant_pool: &[Rc<ConstantPoolEntry<'a>>], major_version: u16) -> Result<(), ParseError> {
+fn validate_constant_pool(constant_pool: &[Rc<ConstantPoolEntry>], major_version: u16) -> Result<(), ParseError> {
     for (i, cp_entry) in constant_pool.iter().enumerate() {
         let valid = cp_entry.validate(major_version).map_err(|e| err!(e, "constant pool entry {}", i))?;
         assert!(valid); // validate functions should never return Ok(false)

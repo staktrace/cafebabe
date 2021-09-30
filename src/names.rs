@@ -21,10 +21,7 @@ pub(crate) fn is_unqualified_name(name: &str, allow_init: bool, allow_clinit: bo
 }
 
 fn is_valid_unqualified_char(c: char) -> bool {
-    match c {
-        '.' | ';' | '[' | '/' | '<' | '>' => false,
-        _ => true,
-    }
+    !matches!(c, '.' | ';' | '[' | '/' | '<' | '>')
 }
 
 pub(crate) fn is_module_name(name: &str) -> bool {

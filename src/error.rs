@@ -48,7 +48,7 @@ pub struct ParseError {
 impl ParseError {
     pub(crate) fn new(msg: String) -> Self {
         ParseError {
-            msg: msg,
+            msg,
             contexts: Vec::new(),
         }
     }
@@ -58,7 +58,7 @@ impl ParseError {
         contexts.push(context);
         ParseError {
             msg: base.msg,
-            contexts: contexts,
+            contexts,
         }
     }
 }

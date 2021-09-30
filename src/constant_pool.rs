@@ -372,6 +372,7 @@ fn read_constant_utf8<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoo
 }
 
 fn read_constant_integer<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, ParseError> {
+    #![allow(clippy::cast_possible_wrap)] // Wrapping is allowed and desired.
     Ok(ConstantPoolEntry::Integer(read_u4(bytes, ix)? as i32))
 }
 
@@ -380,6 +381,7 @@ fn read_constant_float<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPo
 }
 
 fn read_constant_long<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<ConstantPoolEntry<'a>, ParseError> {
+    #![allow(clippy::cast_possible_wrap)] // Wrapping is allowed and desired.
     Ok(ConstantPoolEntry::Long(read_u8(bytes, ix)? as i64))
 }
 

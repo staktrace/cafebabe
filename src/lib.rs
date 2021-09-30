@@ -318,13 +318,13 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError>
         if super_class.is_some() {
             fail!("Found non-empty super_class {}; expected none for module", super_class.unwrap());
         }
-        if interfaces.len() != 0 {
+        if !interfaces.is_empty() {
             fail!("Found {} interfaces; expected 0 for module", interfaces.len());
         }
-        if fields.len() != 0 {
+        if !fields.is_empty() {
             fail!("Found {} fields; expected 0 for module", fields.len());
         }
-        if methods.len() != 0 {
+        if !methods.is_empty() {
             fail!("Found {} methods; expected 0 for module", methods.len());
         }
     }

@@ -451,7 +451,7 @@ fn read_innerclasses_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Consta
     Ok(innerclasses)
 }
 
-fn read_linenumber_data<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Vec<LineNumberEntry>, ParseError> {
+fn read_linenumber_data(bytes: &[u8], ix: &mut usize) -> Result<Vec<LineNumberEntry>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut linenumbers = Vec::with_capacity(count.into());
     for _i in 0..count {

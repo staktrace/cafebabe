@@ -279,6 +279,7 @@ pub struct ClassFile<'a> {
 }
 
 impl<'a> ClassFile<'a> {
+    #[must_use]
     pub fn constantpool_iter(&'a self) -> ConstantPoolIter<'a> {
         ConstantPoolIter::new(&self.constant_pool)
     }

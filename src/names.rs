@@ -17,7 +17,7 @@ pub(crate) fn is_unqualified_name(name: &str, allow_init: bool, allow_clinit: bo
         Some(x) if !is_valid_unqualified_char(x) => return false,
         Some(_) => (),
     };
-    while let Some(x) = chars.next() {
+    for x in chars {
         if !is_valid_unqualified_char(x) {
             return false;
         }
@@ -54,7 +54,7 @@ pub(crate) fn is_module_name(name: &str) -> bool {
 /// Returns Some(';') for an unqualified segment followed by ;
 fn consume_unqualified_segment(chars: &mut Chars) -> Option<char> {
     let mut first = true;
-    while let Some(c) = chars.next() {
+    for c in chars {
         match c {
             '/' if first => return None,
             ';' if first => return None,

@@ -315,8 +315,8 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError>
     }
 
     if is_module {
-        if super_class.is_some() {
-            fail!("Found non-empty super_class {}; expected none for module", super_class.unwrap());
+        if let Some(super_class) = super_class {
+            fail!("Found non-empty super_class {}; expected none for module", super_class);
         }
         if !interfaces.is_empty() {
             fail!("Found {} interfaces; expected 0 for module", interfaces.len());

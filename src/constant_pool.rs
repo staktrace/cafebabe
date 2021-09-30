@@ -305,7 +305,7 @@ impl<'a> ConstantPoolEntry<'a> {
                 y.borrow().get().validate_method_descriptor()
             }
             ConstantPoolEntry::Utf8(x) => {
-                if is_method_descriptor(&x) {
+                if is_method_descriptor(x) {
                     Ok(true)
                 } else {
                     fail!("Invalid method descriptor")
@@ -467,7 +467,7 @@ fn read_constant_package<'a>(bytes: &'a [u8], ix: &mut usize) -> Result<Constant
 
 fn resolve_constant_pool(constant_pool: &[Rc<ConstantPoolEntry>]) -> Result<(), ParseError> {
     for (i, cp_entry) in constant_pool.iter().enumerate() {
-        cp_entry.resolve(i, &constant_pool)?;
+        cp_entry.resolve(i, constant_pool)?;
     }
     Ok(())
 }

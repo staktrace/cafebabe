@@ -135,7 +135,16 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
             ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::PackageInfo(x) => x.resolve(my_index, pool),
-            _ => Ok(()),
+
+            // Entry types that do not reference other enries:
+            ConstantPoolEntry::Zero |
+            ConstantPoolEntry::Utf8(_) |
+            ConstantPoolEntry::Utf8Bytes(_) |
+            ConstantPoolEntry::Integer(_) |
+            ConstantPoolEntry::Float(_) |
+            ConstantPoolEntry::Long(_) |
+            ConstantPoolEntry::Double(_) |
+            ConstantPoolEntry::Unused => Ok(()),
         }
     }
 
@@ -211,7 +220,16 @@ impl<'a> ConstantPoolEntry<'a> {
             ),
             ConstantPoolEntry::ModuleInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_module_name()?),
             ConstantPoolEntry::PackageInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_binary_name()?),
-            _ => Ok(true),
+
+            // Entry types that do not reference other enries:
+            ConstantPoolEntry::Zero |
+            ConstantPoolEntry::Utf8(_) |
+            ConstantPoolEntry::Utf8Bytes(_) |
+            ConstantPoolEntry::Integer(_) |
+            ConstantPoolEntry::Float(_) |
+            ConstantPoolEntry::Long(_) |
+            ConstantPoolEntry::Double(_) |
+            ConstantPoolEntry::Unused => Ok(true),
         }
     }
 

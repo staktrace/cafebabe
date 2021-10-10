@@ -136,10 +136,10 @@ impl<'a> ConstantPoolEntry<'a> {
             // Entry types that reference one other entry:
             ConstantPoolEntry::ClassInfo(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::String(x) => x.resolve(my_index, pool),
-            ConstantPoolEntry::MethodHandle(_, y) => y.resolve(my_index, pool),
+            ConstantPoolEntry::MethodHandle(_, x) => x.resolve(my_index, pool),
             ConstantPoolEntry::MethodType(x) => x.resolve(my_index, pool),
-            ConstantPoolEntry::Dynamic(_, y) => y.resolve(my_index, pool),
-            ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
+            ConstantPoolEntry::Dynamic(_, x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::InvokeDynamic(_, x) => x.resolve(my_index, pool),
             ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
             ConstantPoolEntry::PackageInfo(x) => x.resolve(my_index, pool),
 

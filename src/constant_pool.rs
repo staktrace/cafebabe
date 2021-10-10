@@ -123,19 +123,6 @@ pub(crate) enum ConstantPoolEntry<'a> {
 impl<'a> ConstantPoolEntry<'a> {
     fn resolve(&self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => x.resolve(my_index, pool),
-            ConstantPoolEntry::String(x) => x.resolve(my_index, pool),
-            ConstantPoolEntry::FieldRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
-            ConstantPoolEntry::MethodRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
-            ConstantPoolEntry::NameAndType(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
-            ConstantPoolEntry::MethodHandle(_, y) => y.resolve(my_index, pool),
-            ConstantPoolEntry::MethodType(x) => x.resolve(my_index, pool),
-            ConstantPoolEntry::Dynamic(_, y) => y.resolve(my_index, pool),
-            ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
-            ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
-            ConstantPoolEntry::PackageInfo(x) => x.resolve(my_index, pool),
-
             // Entry types that do not reference other enries:
             ConstantPoolEntry::Zero |
             ConstantPoolEntry::Utf8(_) |
@@ -145,6 +132,22 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::Long(_) |
             ConstantPoolEntry::Double(_) |
             ConstantPoolEntry::Unused => Ok(()),
+
+            // Entry types that reference one other entry:
+            ConstantPoolEntry::ClassInfo(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::String(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::MethodHandle(_, y) => y.resolve(my_index, pool),
+            ConstantPoolEntry::MethodType(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::Dynamic(_, y) => y.resolve(my_index, pool),
+            ConstantPoolEntry::InvokeDynamic(_, y) => y.resolve(my_index, pool),
+            ConstantPoolEntry::ModuleInfo(x) => x.resolve(my_index, pool),
+            ConstantPoolEntry::PackageInfo(x) => x.resolve(my_index, pool),
+
+            // Entry types that reference two other entries:
+            ConstantPoolEntry::FieldRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
+            ConstantPoolEntry::MethodRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
+            ConstantPoolEntry::NameAndType(x, y) => { x.resolve(my_index, pool)?; y.resolve(my_index, pool) },
         }
     }
 

@@ -123,7 +123,7 @@ pub(crate) enum ConstantPoolEntry<'a> {
 impl<'a> ConstantPoolEntry<'a> {
     fn resolve(&self, my_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError> {
         match self {
-            // Entry types that do not reference other enries:
+            // Entry types that do not reference other entries:
             ConstantPoolEntry::Zero |
             ConstantPoolEntry::Utf8(_) |
             ConstantPoolEntry::Utf8Bytes(_) |
@@ -224,7 +224,7 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::ModuleInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_module_name()?),
             ConstantPoolEntry::PackageInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_binary_name()?),
 
-            // Entry types that do not reference other enries:
+            // Entry types that do not reference other entries:
             ConstantPoolEntry::Zero |
             ConstantPoolEntry::Utf8(_) |
             ConstantPoolEntry::Utf8Bytes(_) |

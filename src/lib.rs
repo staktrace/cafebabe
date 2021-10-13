@@ -6,6 +6,7 @@ extern crate cesu8;
 pub mod error;
 
 pub mod attributes;
+pub mod bytecode;
 pub mod constant_pool;
 pub mod names;
 

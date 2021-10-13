@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError};
+use crate::bytecode::{read_opcodes, ByteCode};
 use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, MethodHandle, BootstrapArgument};
 use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
     read_cp_literalconstant, read_cp_integer, read_cp_float, read_cp_long, read_cp_double, read_cp_methodhandle,
@@ -24,6 +25,17 @@ pub struct CodeData<'a> {
     pub code: &'a [u8],
     pub exception_table: Vec<ExceptionTableEntry<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
+}
+
+impl<'a> CodeData<'a> {
+    // This part is still under construction
+    #[allow(dead_code)]
+    fn parse(&self, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<ByteCode<'a>, ParseError> {
+        let opcodes = read_opcodes(self.code, pool)?;
+        Ok(ByteCode {
+            opcodes,
+        })
+    }
 }
 
 #[derive(Debug)]

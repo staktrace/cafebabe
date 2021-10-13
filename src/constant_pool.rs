@@ -670,6 +670,23 @@ pub(crate) fn read_cp_double<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Con
     }
 }
 
+#[derive(Debug)]
+pub struct FieldRef<'a> {
+    pub class_name: Cow<'a, str>,
+    pub name_and_type: NameAndType<'a>
+}
+
+pub(crate) fn read_cp_fieldref<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<FieldRef<'a>, ParseError> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::FieldRef(c, m) => Ok(FieldRef{
+            class_name: c.borrow().get().classinfo(),
+            name_and_type: m.borrow().get().name_and_type(),
+        }),
+        _ => fail!("Unexpected constant pool reference type")
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum MemberKind {
     Field,
@@ -735,7 +752,7 @@ pub(crate) fn read_cp_bootstrap_argument<'a>(bytes: &'a [u8], ix: &mut usize, po
 pub enum ConstantPoolItem<'a> {
     LiteralConstant(LiteralConstant<'a>),
     ClassInfo(Cow<'a, str>),
-    FieldRef { class_name: Cow<'a, str>, name_and_type: NameAndType<'a> },
+    FieldRef(FieldRef<'a>),
     MethodRef { class_name: Cow<'a, str>, name_and_type: NameAndType<'a> },
     InterfaceMethodRef { class_name: Cow<'a, str>, name_and_type: NameAndType<'a> },
     NameAndType(NameAndType<'a>),
@@ -777,7 +794,7 @@ impl<'a> Iterator for ConstantPoolIter<'a> {
                 ConstantPoolEntry::Double(v) => ConstantPoolItem::LiteralConstant(LiteralConstant::Double(*v)),
                 ConstantPoolEntry::ClassInfo(x) => ConstantPoolItem::ClassInfo(x.borrow().get().utf8()),
                 ConstantPoolEntry::String(x) => ConstantPoolItem::LiteralConstant(x.borrow().get().string_literal()),
-                ConstantPoolEntry::FieldRef(c, m) => ConstantPoolItem::FieldRef { class_name: c.borrow().get().classinfo(), name_and_type: m.borrow().get().name_and_type() },
+                ConstantPoolEntry::FieldRef(c, m) => ConstantPoolItem::FieldRef(FieldRef { class_name: c.borrow().get().classinfo(), name_and_type: m.borrow().get().name_and_type() }),
                 ConstantPoolEntry::MethodRef(c, m) => ConstantPoolItem::MethodRef { class_name: c.borrow().get().classinfo(), name_and_type: m.borrow().get().name_and_type() },
                 ConstantPoolEntry::InterfaceMethodRef(c, m) => ConstantPoolItem::InterfaceMethodRef { class_name: c.borrow().get().classinfo(), name_and_type: m.borrow().get().name_and_type() },
                 ConstantPoolEntry::NameAndType(x, y) => ConstantPoolItem::NameAndType(NameAndType { name: x.borrow().get().utf8(), descriptor: y.borrow().get().utf8() }),

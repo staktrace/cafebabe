@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError};
+use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError, ParseOptions};
 use crate::bytecode::{read_opcodes, ByteCode};
 use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, MethodHandle, BootstrapArgument};
 use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
@@ -23,19 +23,9 @@ pub struct CodeData<'a> {
     pub max_stack: u16,
     pub max_locals: u16,
     pub code: &'a [u8],
+    pub bytecode: Option<ByteCode<'a>>,
     pub exception_table: Vec<ExceptionTableEntry<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
-}
-
-impl<'a> CodeData<'a> {
-    // This part is still under construction
-    #[allow(dead_code)]
-    fn parse(&self, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<ByteCode<'a>, ParseError> {
-        let opcodes = read_opcodes(self.code, pool)?;
-        Ok(ByteCode {
-            opcodes,
-        })
-    }
 }
 
 #[derive(Debug)]
@@ -327,7 +317,7 @@ fn ensure_length(length: usize, expected: usize) -> Result<(), ParseError> {
     Ok(())
 }
 
-fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<CodeData<'a>, ParseError> {
+fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], opts: &ParseOptions) -> Result<CodeData<'a>, ParseError> {
     let max_stack = read_u2(bytes, ix)?;
     let max_locals = read_u2(bytes, ix)?;
     let code_length = read_u4(bytes, ix)? as usize;
@@ -350,11 +340,17 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
             catch_type,
         });
     }
-    let code_attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "code attribute"))?;
+    let code_attributes = read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "code attribute"))?;
+    let bytecode = if opts.parse_bytecode {
+        Some(ByteCode{ opcodes: read_opcodes(code, pool)? })
+    } else {
+        None
+    };
     Ok(CodeData {
         max_stack,
         max_locals,
         code,
+        bytecode,
         exception_table,
         attributes: code_attributes,
     })
@@ -799,7 +795,7 @@ fn read_nestmembers_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Constan
     Ok(members)
 }
 
-fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<RecordComponentEntry<'a>>, ParseError> {
+fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], opts: &ParseOptions) -> Result<Vec<RecordComponentEntry<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut components = Vec::with_capacity(count.into());
     for i in 0..count {
@@ -811,7 +807,7 @@ fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
         if !is_field_descriptor(&descriptor) {
             fail!("Invalid descriptor for entry {}", i);
         }
-        let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "entry {}", i))?;
+        let attributes = read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "entry {}", i))?;
         components.push(RecordComponentEntry {
             name,
             descriptor,
@@ -821,7 +817,7 @@ fn read_record_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPool
     Ok(components)
 }
 
-pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<AttributeInfo<'a>>, ParseError> {
+pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], opts: &ParseOptions) -> Result<Vec<AttributeInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut attributes = Vec::with_capacity(count.into());
     for i in 0..count {
@@ -837,7 +833,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
                 AttributeData::ConstantValue(read_cp_literalconstant(bytes, ix, pool).map_err(|e| err!(e, "value field of ConstantValue attribute {}", i))?)
             }
             "Code" => {
-                let code_data = read_code_data(bytes, ix, pool).map_err(|e| err!(e, "Code attribute {}", i))?;
+                let code_data = read_code_data(bytes, ix, pool, opts).map_err(|e| err!(e, "Code attribute {}", i))?;
                 AttributeData::Code(code_data)
             }
             "StackMapTable" => {
@@ -952,7 +948,7 @@ pub(crate) fn read_attributes<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<Co
                 AttributeData::NestMembers(nestmembers_data)
             }
             "Record" => {
-                let record_data = read_record_data(bytes, ix, pool).map_err(|e| err!(e, "Record attribute {}", i))?;
+                let record_data = read_record_data(bytes, ix, pool, opts).map_err(|e| err!(e, "Record attribute {}", i))?;
                 AttributeData::Record(record_data)
             }
             _ => {

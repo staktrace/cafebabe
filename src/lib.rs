@@ -129,7 +129,7 @@ pub struct FieldInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<FieldInfo<'a>>, ParseError> {
+fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], opts: &ParseOptions) -> Result<Vec<FieldInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut fields = Vec::with_capacity(count.into());
     let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
@@ -147,7 +147,7 @@ fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry
         if !unique_ids.insert(unique_id) {
             fail!("Class field {} is duplicate of previously-encountered field", i);
         }
-        let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class field {}", i))?;
+        let attributes = read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "class field {}", i))?;
         fields.push(FieldInfo {
             access_flags,
             name,
@@ -183,7 +183,7 @@ pub struct MethodInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], in_interface: bool, major_version: u16) -> Result<Vec<MethodInfo<'a>>, ParseError> {
+fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], opts: &ParseOptions, in_interface: bool, major_version: u16) -> Result<Vec<MethodInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
     let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
@@ -213,7 +213,7 @@ fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntr
         if !unique_ids.insert(unique_id) {
             fail!("Class method {} is duplicate of previously-encountered method", i);
         }
-        let attributes = read_attributes(bytes, ix, pool).map_err(|e| err!(e, "class method {}", i))?;
+        let attributes = read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "class method {}", i))?;
         methods.push(MethodInfo {
             access_flags,
             name,
@@ -286,7 +286,35 @@ impl<'a> ClassFile<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct ParseOptions {
+    parse_bytecode: bool,
+}
+
+impl ParseOptions {
+    pub fn default() -> Self {
+        Self {
+            parse_bytecode: true,
+        }
+    }
+
+    /// Turns on or off parsing of bytecode from the Code attributes of methods. If parsing
+    /// is enabled, the CodeData structure's optional bytecode field will be populated
+    /// (or parsing will fail entirely if bytecode parsing failed). If parsing is disabled,
+    /// the CodeData structure's optional bytecode field will be set to None. Parsing is
+    /// enabled by default, but can be disabled to speed up parsing in cases where the
+    /// parsed bytecode is not needed.
+    pub fn parse_bytecode(&mut self, parse: bool) -> &mut ParseOptions {
+        self.parse_bytecode = parse;
+        self
+    }
+}
+
 pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError> {
+    parse_class_with_options(raw_bytes, &ParseOptions::default())
+}
+
+pub fn parse_class_with_options<'a>(raw_bytes: &'a [u8], opts: &ParseOptions) -> Result<ClassFile<'a>, ParseError> {
     let mut ix = 0;
     if read_u4(raw_bytes, &mut ix)? != 0xCAFE_BABE {
         fail!("Unexpected magic header");
@@ -308,9 +336,9 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError>
     let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "this_class"))?;
     let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "super_class"))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
-    let fields = read_fields(raw_bytes, &mut ix, &constant_pool)?;
-    let methods = read_methods(raw_bytes, &mut ix, &constant_pool, access_flags.contains(ClassAccessFlags::INTERFACE), major_version)?;
-    let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "class"))?;
+    let fields = read_fields(raw_bytes, &mut ix, &constant_pool, opts)?;
+    let methods = read_methods(raw_bytes, &mut ix, &constant_pool, opts, access_flags.contains(ClassAccessFlags::INTERFACE), major_version)?;
+    let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool, opts).map_err(|e| err!(e, "class"))?;
     // Section 4.8 "Format Checking" says the class file must not have extra bytes at the end
     if ix != raw_bytes.len() {
         fail!("Extra bytes found at index {} after reading class file", ix);

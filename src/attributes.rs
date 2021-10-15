@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError, ParseOptions};
-use crate::bytecode::{read_opcodes, ByteCode};
+use crate::bytecode::{ByteCode};
 use crate::constant_pool::{ConstantPoolEntry, NameAndType, LiteralConstant, MethodHandle, BootstrapArgument};
 use crate::constant_pool::{read_cp_utf8, read_cp_utf8_opt, read_cp_classinfo, read_cp_classinfo_opt, read_cp_nameandtype_opt,
     read_cp_literalconstant, read_cp_integer, read_cp_float, read_cp_long, read_cp_double, read_cp_methodhandle,
@@ -342,7 +342,7 @@ fn read_code_data<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEn
     }
     let code_attributes = read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "code attribute"))?;
     let bytecode = if opts.parse_bytecode {
-        Some(ByteCode{ opcodes: read_opcodes(code, pool)? })
+        Some(ByteCode::from(code, pool).map_err(|e| err!(e, "bytecode"))?)
     } else {
         None
     };

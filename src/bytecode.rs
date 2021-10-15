@@ -202,13 +202,144 @@ pub enum Opcode<'a> {
 
 #[derive(Debug)]
 pub struct ByteCode<'a> {
-    pub opcodes: Vec<Opcode<'a>>,
+    pub opcodes: Vec<(usize, Opcode<'a>)>,
 }
 
-pub(crate) fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Opcode<'a>>, ParseError> {
+impl<'a> ByteCode<'a> {
+    pub(crate) fn from(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Self, ParseError> {
+        let bytecode = Self {
+            opcodes: read_opcodes(code, pool)?
+        };
+        bytecode.validate_jumps()?;
+        Ok(bytecode)
+    }
+
+    /// Given an offset (in bytes) into the bytecode array, return the index into
+    /// `self.opcodes` of the corresponding opcode. If there is no corresponding
+    /// opcode at that offset, returns None.
+    pub fn get_opcode_index(&self, offset: usize) -> Option<usize> {
+        let mut min = 0 as usize;
+        let mut max = self.opcodes.len();
+        while min < max {
+            let mid = (min + max) / 2;
+            let mid_offset = self.opcodes[mid].0;
+            if mid_offset == offset {
+                return Some(mid);
+            }
+            if mid_offset > offset {
+                max = mid;
+            } else if min == mid {
+                break;
+            } else {
+                min = mid;
+            }
+        }
+        None
+    }
+
+    fn validate_jump(&self, source_offset: i32, jump: JumpOffset) -> Result<(), ParseError> {
+        let target_offset = usize::try_from(source_offset + jump).map_err(|_| err!("Invalid destination after applying jump"))?;
+        if self.get_opcode_index(target_offset).is_none() {
+            fail!("Invalid opcode offset after applying jump");
+        }
+        Ok(())
+    }
+
+    fn validate_opcode_jumps(&self, offset: &usize, opcode: &Opcode) -> Result<(), ParseError> {
+        let source_offset = i32::try_from(*offset).map_err(|_| err!("Unable to convert offset to i32"))?;
+        match opcode {
+            Opcode::Goto(j) |
+            Opcode::IfAcmpeq(j) |
+            Opcode::IfAcmpne(j) |
+            Opcode::IfIcmpeq(j) |
+            Opcode::IfIcmpge(j) |
+            Opcode::IfIcmpgt(j) |
+            Opcode::IfIcmple(j) |
+            Opcode::IfIcmplt(j) |
+            Opcode::IfIcmpne(j) |
+            Opcode::Ifeq(j) |
+            Opcode::Ifge(j) |
+            Opcode::Ifgt(j) |
+            Opcode::Ifle(j) |
+            Opcode::Iflt(j) |
+            Opcode::Ifne(j) |
+            Opcode::Ifnonnull(j) |
+            Opcode::Ifnull(j) |
+            Opcode::Jsr(j) => self.validate_jump(source_offset, *j)?,
+            Opcode::Lookupswitch(table) => {
+                self.validate_jump(source_offset, table.default).map_err(|e| err!(e, "default jump offset"))?;
+                for (i, jump) in &table.match_offsets {
+                    self.validate_jump(source_offset, *jump).map_err(|e| err!(e, "match offset {}", i))?;
+                }
+            }
+            Opcode::Tableswitch(table) => {
+                self.validate_jump(source_offset, table.default).map_err(|e| err!(e, "default jump offset"))?;
+                for (i, jump) in table.jumps.iter().enumerate() {
+                    self.validate_jump(source_offset, *jump).map_err(|e| err!(e, "range offset {}", i))?;
+                }
+            }
+            _ => (),
+        };
+        Ok(())
+    }
+
+    fn validate_jumps(&self) -> Result<(), ParseError> {
+        for (offset, opcode) in &self.opcodes {
+            self.validate_opcode_jumps(offset, opcode).map_err(|e| err!(e, "opcode at offset {}", offset))?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn test_get_opcode() {
+    let bytecode = ByteCode {
+        opcodes: vec![
+        ],
+    };
+    assert_eq!(bytecode.get_opcode_index(0), None);
+    assert_eq!(bytecode.get_opcode_index(1), None);
+
+    let bytecode = ByteCode {
+        opcodes: vec![
+            (0, Opcode::Nop),
+        ],
+    };
+    assert_eq!(bytecode.get_opcode_index(0), Some(0));
+    assert_eq!(bytecode.get_opcode_index(1), None);
+
+    let bytecode = ByteCode {
+        opcodes: vec![
+            (0, Opcode::Nop),
+            (3, Opcode::Nop),
+        ],
+    };
+    assert_eq!(bytecode.get_opcode_index(0), Some(0));
+    assert_eq!(bytecode.get_opcode_index(1), None);
+    assert_eq!(bytecode.get_opcode_index(2), None);
+    assert_eq!(bytecode.get_opcode_index(3), Some(1));
+    assert_eq!(bytecode.get_opcode_index(4), None);
+
+    let bytecode = ByteCode {
+        opcodes: vec![
+            (0, Opcode::Nop),
+            (3, Opcode::Nop),
+            (4, Opcode::Nop),
+        ],
+    };
+    assert_eq!(bytecode.get_opcode_index(0), Some(0));
+    assert_eq!(bytecode.get_opcode_index(1), None);
+    assert_eq!(bytecode.get_opcode_index(2), None);
+    assert_eq!(bytecode.get_opcode_index(3), Some(1));
+    assert_eq!(bytecode.get_opcode_index(4), Some(2));
+    assert_eq!(bytecode.get_opcode_index(5), None);
+}
+
+fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<(usize, Opcode<'a>)>, ParseError> {
     let mut opcodes = Vec::new();
     let mut ix = 0;
     while ix < code.len() {
+        let opcode_ix = ix;
         let opcode = match read_u1(code, &mut ix)? {
             0x00 => Opcode::Nop,
             0x01 => Opcode::AconstNull,
@@ -505,7 +636,7 @@ pub(crate) fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>
             0xff => Opcode::Impdep2,
             v @ _ => fail!("Unexpected opcode {} at index {}", v, ix - 1),
         };
-        opcodes.push(opcode);
+        opcodes.push((opcode_ix, opcode));
     }
     Ok(opcodes)
 }

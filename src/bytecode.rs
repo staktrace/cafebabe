@@ -202,6 +202,10 @@ pub enum Opcode<'a> {
 
 #[derive(Debug)]
 pub struct ByteCode<'a> {
+    /// This contains pairs of (offset, opcode) where offset is the offset of the start
+    /// of the opcode in bytes from the beginning of the data section of the Code attribute.
+    /// This array will always be sorted in increasing offset order. The `get_opcode_index`
+    /// function can be used to look up the vector index for a particular offset.
     pub opcodes: Vec<(usize, Opcode<'a>)>,
 }
 

@@ -6,18 +6,20 @@ use crate::{read_u1, read_u2, read_u4, ParseError};
 use crate::constant_pool::{get_cp_loadable, read_cp_classinfo, read_cp_invokedynamic, read_cp_memberref};
 use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef};
 
+pub type JumpOffset = i32;
+
 #[derive(Debug)]
 pub struct LookupTable {
-    pub default: i32,
-    pub match_offsets: Vec<(i32, i32)>,
+    pub default: JumpOffset,
+    pub match_offsets: Vec<(i32, JumpOffset)>,
 }
 
 #[derive(Debug)]
 pub struct RangeTable {
-    pub default: i32,
+    pub default: JumpOffset,
     pub low: i32,
     pub high: i32,
-    pub jumps: Vec<i32>,
+    pub jumps: Vec<JumpOffset>,
 }
 
 #[derive(Debug)]
@@ -95,7 +97,7 @@ pub enum Opcode<'a> {
     Fsub,
     Getfield(MemberRef<'a>),
     Getstatic(MemberRef<'a>),
-    Goto(i32), // both wide and narrow
+    Goto(JumpOffset), // both wide and narrow
     I2b,
     I2c,
     I2d,
@@ -114,22 +116,22 @@ pub enum Opcode<'a> {
     Iconst4,
     Iconst5,
     Idiv,
-    IfAcmpeq(i16),
-    IfAcmpne(i16),
-    IfIcmpeq(i16),
-    IfIcmpge(i16),
-    IfIcmpgt(i16),
-    IfIcmple(i16),
-    IfIcmplt(i16),
-    IfIcmpne(i16),
-    Ifeq(i16),
-    Ifge(i16),
-    Ifgt(i16),
-    Ifle(i16),
-    Iflt(i16),
-    Ifne(i16),
-    Ifnonnull(i16),
-    Ifnull(i16),
+    IfAcmpeq(JumpOffset),
+    IfAcmpne(JumpOffset),
+    IfIcmpeq(JumpOffset),
+    IfIcmpge(JumpOffset),
+    IfIcmpgt(JumpOffset),
+    IfIcmple(JumpOffset),
+    IfIcmplt(JumpOffset),
+    IfIcmpne(JumpOffset),
+    Ifeq(JumpOffset),
+    Ifge(JumpOffset),
+    Ifgt(JumpOffset),
+    Ifle(JumpOffset),
+    Iflt(JumpOffset),
+    Ifne(JumpOffset),
+    Ifnonnull(JumpOffset),
+    Ifnull(JumpOffset),
     Iinc(u16, i16), // both wide and narrow
     Iload(u16), // both wide and narrow
     Impdep1,
@@ -151,7 +153,7 @@ pub enum Opcode<'a> {
     Isub,
     Iushr,
     Ixor,
-    Jsr(i32), // both wide and narrow
+    Jsr(JumpOffset), // both wide and narrow
     L2d,
     L2f,
     L2i,
@@ -361,27 +363,27 @@ pub(crate) fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>
             0x96 => Opcode::Fcmpg,
             0x97 => Opcode::Dcmpl,
             0x98 => Opcode::Dcmpg,
-            0x99 => Opcode::Ifeq(read_u2(code, &mut ix)? as i16),
-            0x9a => Opcode::Ifne(read_u2(code, &mut ix)? as i16),
-            0x9b => Opcode::Iflt(read_u2(code, &mut ix)? as i16),
-            0x9c => Opcode::Ifge(read_u2(code, &mut ix)? as i16),
-            0x9d => Opcode::Ifgt(read_u2(code, &mut ix)? as i16),
-            0x9e => Opcode::Ifle(read_u2(code, &mut ix)? as i16),
-            0x9f => Opcode::IfIcmpeq(read_u2(code, &mut ix)? as i16),
-            0xa0 => Opcode::IfIcmpne(read_u2(code, &mut ix)? as i16),
-            0xa1 => Opcode::IfIcmplt(read_u2(code, &mut ix)? as i16),
-            0xa2 => Opcode::IfIcmpge(read_u2(code, &mut ix)? as i16),
-            0xa3 => Opcode::IfIcmpgt(read_u2(code, &mut ix)? as i16),
-            0xa4 => Opcode::IfIcmple(read_u2(code, &mut ix)? as i16),
-            0xa5 => Opcode::IfAcmpeq(read_u2(code, &mut ix)? as i16),
-            0xa6 => Opcode::IfAcmpne(read_u2(code, &mut ix)? as i16),
+            0x99 => Opcode::Ifeq((read_u2(code, &mut ix)? as i16).into()),
+            0x9a => Opcode::Ifne((read_u2(code, &mut ix)? as i16).into()),
+            0x9b => Opcode::Iflt((read_u2(code, &mut ix)? as i16).into()),
+            0x9c => Opcode::Ifge((read_u2(code, &mut ix)? as i16).into()),
+            0x9d => Opcode::Ifgt((read_u2(code, &mut ix)? as i16).into()),
+            0x9e => Opcode::Ifle((read_u2(code, &mut ix)? as i16).into()),
+            0x9f => Opcode::IfIcmpeq((read_u2(code, &mut ix)? as i16).into()),
+            0xa0 => Opcode::IfIcmpne((read_u2(code, &mut ix)? as i16).into()),
+            0xa1 => Opcode::IfIcmplt((read_u2(code, &mut ix)? as i16).into()),
+            0xa2 => Opcode::IfIcmpge((read_u2(code, &mut ix)? as i16).into()),
+            0xa3 => Opcode::IfIcmpgt((read_u2(code, &mut ix)? as i16).into()),
+            0xa4 => Opcode::IfIcmple((read_u2(code, &mut ix)? as i16).into()),
+            0xa5 => Opcode::IfAcmpeq((read_u2(code, &mut ix)? as i16).into()),
+            0xa6 => Opcode::IfAcmpne((read_u2(code, &mut ix)? as i16).into()),
             0xa7 => Opcode::Goto((read_u2(code, &mut ix)? as i16).into()),
             0xa8 => Opcode::Jsr((read_u2(code, &mut ix)? as i16).into()),
             0xa9 => Opcode::Ret(read_u1(code, &mut ix)?.into()),
             0xaa => {
                 // Skip past padding to reach 4-byte alignment
                 ix = (ix + 3) & !0x3;
-                let default = read_u4(code, &mut ix)? as i32;
+                let default = read_u4(code, &mut ix)? as JumpOffset;
                 let low = read_u4(code, &mut ix)? as i32;
                 let high = read_u4(code, &mut ix)? as i32;
                 if low > high {
@@ -393,7 +395,7 @@ pub(crate) fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>
                 };
                 let mut jumps = Vec::with_capacity(jump_count);
                 for _ in 0..jump_count {
-                    jumps.push(read_u4(code, &mut ix)? as i32);
+                    jumps.push(read_u4(code, &mut ix)? as JumpOffset);
                 }
                 Opcode::Tableswitch(RangeTable {
                     default,
@@ -405,7 +407,7 @@ pub(crate) fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>
             0xab => {
                 // Skip past padding to reach 4-byte alignment
                 ix = (ix + 3) & !0x3;
-                let default = read_u4(code, &mut ix)? as i32;
+                let default = read_u4(code, &mut ix)? as JumpOffset;
                 let npairs = read_u4(code, &mut ix)? as i32;
                 if npairs < 0 {
                     fail!("Number of pairs in lookupswitch must be non-negative at index {}", ix - 4);
@@ -417,7 +419,7 @@ pub(crate) fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>
                 let mut match_offsets = Vec::with_capacity(pair_count);
                 for _ in 0..pair_count {
                     let match_part = read_u4(code, &mut ix)? as i32;
-                    let offset_part = read_u4(code, &mut ix)? as i32;
+                    let offset_part = read_u4(code, &mut ix)? as JumpOffset;
                     match_offsets.push((match_part, offset_part));
                 }
                 Opcode::Lookupswitch(LookupTable {
@@ -494,10 +496,10 @@ pub(crate) fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>
                 }
             }
             0xc5 => Opcode::Multianewarray(read_cp_classinfo(code, &mut ix, pool)?, read_u1(code, &mut ix)?),
-            0xc6 => Opcode::Ifnull(read_u2(code, &mut ix)? as i16),
-            0xc7 => Opcode::Ifnonnull(read_u2(code, &mut ix)? as i16),
-            0xc8 => Opcode::Goto(read_u4(code, &mut ix)? as i32),
-            0xc9 => Opcode::Jsr(read_u4(code, &mut ix)? as i32),
+            0xc6 => Opcode::Ifnull((read_u2(code, &mut ix)? as i16).into()),
+            0xc7 => Opcode::Ifnonnull((read_u2(code, &mut ix)? as i16).into()),
+            0xc8 => Opcode::Goto(read_u4(code, &mut ix)? as JumpOffset),
+            0xc9 => Opcode::Jsr(read_u4(code, &mut ix)? as JumpOffset),
             0xca => Opcode::Breakpoint,
             0xfe => Opcode::Impdep1,
             0xff => Opcode::Impdep2,

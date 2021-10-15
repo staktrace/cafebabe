@@ -291,50 +291,6 @@ impl<'a> ByteCode<'a> {
     }
 }
 
-#[test]
-fn test_get_opcode() {
-    let bytecode = ByteCode {
-        opcodes: vec![
-        ],
-    };
-    assert_eq!(bytecode.get_opcode_index(0), None);
-    assert_eq!(bytecode.get_opcode_index(1), None);
-
-    let bytecode = ByteCode {
-        opcodes: vec![
-            (0, Opcode::Nop),
-        ],
-    };
-    assert_eq!(bytecode.get_opcode_index(0), Some(0));
-    assert_eq!(bytecode.get_opcode_index(1), None);
-
-    let bytecode = ByteCode {
-        opcodes: vec![
-            (0, Opcode::Nop),
-            (3, Opcode::Nop),
-        ],
-    };
-    assert_eq!(bytecode.get_opcode_index(0), Some(0));
-    assert_eq!(bytecode.get_opcode_index(1), None);
-    assert_eq!(bytecode.get_opcode_index(2), None);
-    assert_eq!(bytecode.get_opcode_index(3), Some(1));
-    assert_eq!(bytecode.get_opcode_index(4), None);
-
-    let bytecode = ByteCode {
-        opcodes: vec![
-            (0, Opcode::Nop),
-            (3, Opcode::Nop),
-            (4, Opcode::Nop),
-        ],
-    };
-    assert_eq!(bytecode.get_opcode_index(0), Some(0));
-    assert_eq!(bytecode.get_opcode_index(1), None);
-    assert_eq!(bytecode.get_opcode_index(2), None);
-    assert_eq!(bytecode.get_opcode_index(3), Some(1));
-    assert_eq!(bytecode.get_opcode_index(4), Some(2));
-    assert_eq!(bytecode.get_opcode_index(5), None);
-}
-
 fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<(usize, Opcode<'a>)>, ParseError> {
     let mut opcodes = Vec::new();
     let mut ix = 0;
@@ -639,4 +595,53 @@ fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Resul
         opcodes.push((opcode_ix, opcode));
     }
     Ok(opcodes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_opcode() {
+        let bytecode = ByteCode {
+            opcodes: vec![
+            ],
+        };
+        assert_eq!(bytecode.get_opcode_index(0), None);
+        assert_eq!(bytecode.get_opcode_index(1), None);
+
+        let bytecode = ByteCode {
+            opcodes: vec![
+                (0, Opcode::Nop),
+            ],
+        };
+        assert_eq!(bytecode.get_opcode_index(0), Some(0));
+        assert_eq!(bytecode.get_opcode_index(1), None);
+
+        let bytecode = ByteCode {
+            opcodes: vec![
+                (0, Opcode::Nop),
+                (3, Opcode::Nop),
+            ],
+        };
+        assert_eq!(bytecode.get_opcode_index(0), Some(0));
+        assert_eq!(bytecode.get_opcode_index(1), None);
+        assert_eq!(bytecode.get_opcode_index(2), None);
+        assert_eq!(bytecode.get_opcode_index(3), Some(1));
+        assert_eq!(bytecode.get_opcode_index(4), None);
+
+        let bytecode = ByteCode {
+            opcodes: vec![
+                (0, Opcode::Nop),
+                (3, Opcode::Nop),
+                (4, Opcode::Nop),
+            ],
+        };
+        assert_eq!(bytecode.get_opcode_index(0), Some(0));
+        assert_eq!(bytecode.get_opcode_index(1), None);
+        assert_eq!(bytecode.get_opcode_index(2), None);
+        assert_eq!(bytecode.get_opcode_index(3), Some(1));
+        assert_eq!(bytecode.get_opcode_index(4), Some(2));
+        assert_eq!(bytecode.get_opcode_index(5), None);
+    }
 }

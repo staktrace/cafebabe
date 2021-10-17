@@ -256,55 +256,36 @@ impl<'a> ConstantPoolEntry<'a> {
     }
 
     fn validate_classinfo_name(&self) -> Result<bool, ParseError> {
-        match self {
-            ConstantPoolEntry::Utf8(x) => {
-                // Per 4.4.1, classinfo names are allowed to be array descriptors too. This happens in the java 16 modules file.
-                if is_binary_name(x) || is_array_descriptor(x) {
-                    Ok(true)
-                } else {
-                    fail!("Invalid binary name")
-                }
-            }
-            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        let x = self.str()?;
+        // Per 4.4.1, classinfo names are allowed to be array descriptors too. This happens in the java 16 modules file.
+        if is_binary_name(x) || is_array_descriptor(x) {
+            Ok(true)
+        } else {
+            fail!("Invalid binary name")
         }
     }
 
     fn validate_binary_name(&self) -> Result<bool, ParseError> {
-        match self {
-            ConstantPoolEntry::Utf8(x) => {
-                if is_binary_name(x) {
-                    Ok(true)
-                } else {
-                    fail!("Invalid binary name")
-                }
-            }
-            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        if is_binary_name(self.str()?) {
+            Ok(true)
+        } else {
+            fail!("Invalid binary name")
         }
     }
 
     fn validate_unqualified_name(&self) -> Result<bool, ParseError> {
-        match self {
-            ConstantPoolEntry::Utf8(x) => {
-                if is_unqualified_name(x, true, false) {
-                    Ok(true)
-                } else {
-                    fail!("Invalid unqualified name")
-                }
-            }
-            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        if is_unqualified_name(self.str()?, true, false) {
+            Ok(true)
+        } else {
+            fail!("Invalid unqualified name")
         }
     }
 
     fn validate_module_name(&self) -> Result<bool, ParseError> {
-        match self {
-            ConstantPoolEntry::Utf8(x) => {
-                if is_module_name(x) {
-                    Ok(true)
-                } else {
-                    fail!("Invalid module name")
-                }
-            }
-            _ => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+        if is_module_name(self.str()?) {
+            Ok(true)
+        } else {
+            fail!("Invalid module name")
         }
     }
 
@@ -316,7 +297,7 @@ impl<'a> ConstantPoolEntry<'a> {
                 // points to a later entry in the constant pool that hasn't been validated yet.
                 // assert on the bool because we should never get Ok(false).
                 assert!(y.ensure_type(ConstantPoolEntryTypes::UTF8)?);
-                if is_field_descriptor(&y.borrow().get().utf8()) {
+                if is_field_descriptor(&y.borrow().get().str()?) {
                     Ok(true)
                 } else {
                     fail!("Invalid field descriptor")
@@ -336,14 +317,13 @@ impl<'a> ConstantPoolEntry<'a> {
                 assert!(y.ensure_type(ConstantPoolEntryTypes::UTF8)?);
                 y.borrow().get().validate_method_descriptor()
             }
-            ConstantPoolEntry::Utf8(x) => {
-                if is_method_descriptor(x) {
+            _ => {
+                if is_method_descriptor(self.str()?) {
                     Ok(true)
                 } else {
                     fail!("Invalid method descriptor")
                 }
             }
-            _ => panic!("Attempting to get descriptor from non-NameAndType constant pool entry!"),
         }
     }
 

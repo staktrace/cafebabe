@@ -245,6 +245,16 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
+    /// Returns &str if self if Utf8. Returns parse error otherwise.
+    /// TODO currently panics if self is Utf8Bytes.
+    fn str(&self) -> Result<&str, ParseError> {
+        match self {
+            ConstantPoolEntry::Utf8(x) => Ok(x),
+            ConstantPoolEntry::Utf8Bytes(_) => panic!("Attempting to get utf-8 data from non-utf8 constant pool entry!"),
+            _ => fail!("Unexpected constant pool reference type")
+        }
+    }
+
     fn validate_classinfo_name(&self) -> Result<bool, ParseError> {
         match self {
             ConstantPoolEntry::Utf8(x) => {

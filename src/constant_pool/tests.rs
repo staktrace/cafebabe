@@ -25,19 +25,6 @@ macro_rules! assert_validate_fails {
     };
 }
 
-// Temporarily capture existing suboptimal behavior. After
-// https://github.com/staktrace/cafebabe/issues/7
-// is fixed, all calls will be replaced with calls to assert_validate_fails
-// and this macro will be removed.
-macro_rules! assert_validate_panics {
-    ($entry:expr) => {
-        let result = std::panic::catch_unwind(|| {
-            let _ = $entry.validate(0);
-        });
-        assert!(result.is_err());
-    };
-}
-
 // Helper for creating the smart pointer types (RefCell, ConstantPoolRef,
 // Rc) required to nest ConstantPoolEntry instances.
 fn wrap(entry: ConstantPoolEntry) -> RefCell<ConstantPoolRef> {
@@ -62,7 +49,10 @@ fn test_validate_class_info() {
     assert_validate_passes!(ClassInfo(wrap(Utf8(Cow::from("[Lsome/package/Class;")))));
 
     assert_validate_fails!(ClassInfo(wrap(Utf8(Cow::from("")))), "Invalid binary name");
-    assert_validate_panics!(ClassInfo(wrap(Utf8Bytes(&[]))));
+    assert_validate_fails!(
+        ClassInfo(wrap(Utf8Bytes(&[]))),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
     assert_validate_fails!(
         ClassInfo(wrap(Zero)),
         "Unexpected constant pool reference type"
@@ -117,14 +107,15 @@ fn test_validate_field_ref() {
         ),
         "Invalid field descriptor"
     );
-    assert_validate_panics!(
+    assert_validate_fails!(
         FieldRef(
             wrap(ClassInfo(wrap(Utf8(Cow::from("some/package/Class"))))),
             wrap(NameAndType(
                 wrap(Utf8(Cow::from("someField"))),
                 wrap(Utf8Bytes(&[])),
             )),
-        )
+        ),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
     );
     assert_validate_fails!(
         FieldRef(
@@ -172,14 +163,15 @@ fn test_validate_method_ref() {
         ),
         "Invalid method descriptor"
     );
-    assert_validate_panics!(
+    assert_validate_fails!(
         MethodRef(
             wrap(ClassInfo(wrap(Utf8(Cow::from("some/package/Class"))))),
             wrap(NameAndType(
                 wrap(Utf8(Cow::from("someMethod"))),
                 wrap(Utf8Bytes(&[])),
             )),
-        )
+        ),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
     );
     assert_validate_fails!(
         MethodRef(
@@ -227,14 +219,15 @@ fn test_validate_interface_method_ref() {
         ),
         "Invalid method descriptor"
     );
-    assert_validate_panics!(
+    assert_validate_fails!(
         InterfaceMethodRef(
             wrap(ClassInfo(wrap(Utf8(Cow::from("some/package/Class"))))),
             wrap(NameAndType(
                 wrap(Utf8(Cow::from("someMethod"))),
                 wrap(Utf8Bytes(&[])),
             )),
-        )
+        ),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
     );
     assert_validate_fails!(
         InterfaceMethodRef(
@@ -267,10 +260,10 @@ fn test_validate_name_and_type() {
         NameAndType(wrap(Zero), wrap(Utf8(Cow::from("anything goes"))),),
         "Unexpected constant pool reference type"
     );
-    assert_validate_panics!(NameAndType(
-        wrap(Utf8Bytes(&[])),
-        wrap(Utf8(Cow::from("anything goes"))),
-    ));
+    assert_validate_fails!(
+        NameAndType(wrap(Utf8Bytes(&[])), wrap(Utf8(Cow::from("anything goes"))),),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
     assert_validate_fails!(
         NameAndType(wrap(Utf8(Cow::from("someUnqualifiedName"))), wrap(Zero)),
         "Unexpected constant pool reference type"
@@ -389,7 +382,10 @@ fn test_validate_method_type() {
         MethodType(wrap(Utf8(Cow::from("")))),
         "Invalid method descriptor"
     );
-    assert_validate_panics!(MethodType(wrap(Utf8Bytes(&[]))));
+    assert_validate_fails!(
+        MethodType(wrap(Utf8Bytes(&[]))),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
     assert_validate_fails!(
         MethodType(wrap(Zero)),
         "Unexpected constant pool reference type"
@@ -434,13 +430,16 @@ fn test_validate_dynamic() {
         ),
         "Invalid field descriptor"
     );
-    assert_validate_panics!(Dynamic(
-        0,
-        wrap(NameAndType(
-            wrap(Utf8(Cow::from("someField"))),
-            wrap(Utf8Bytes(&[]))
-        )),
-    ));
+    assert_validate_fails!(
+        Dynamic(
+            0,
+            wrap(NameAndType(
+                wrap(Utf8(Cow::from("someField"))),
+                wrap(Utf8Bytes(&[]))
+            )),
+        ),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
 }
 
 #[test]
@@ -481,13 +480,16 @@ fn test_validate_invoke_dynamic() {
         ),
         "Invalid method descriptor"
     );
-    assert_validate_panics!(InvokeDynamic(
-        0,
-        wrap(NameAndType(
-            wrap(Utf8(Cow::from("someMethod"))),
-            wrap(Utf8Bytes(&[]))
-        )),
-    ));
+    assert_validate_fails!(
+        InvokeDynamic(
+            0,
+            wrap(NameAndType(
+                wrap(Utf8(Cow::from("someMethod"))),
+                wrap(Utf8Bytes(&[]))
+            )),
+        ),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
 }
 
 #[test]
@@ -498,7 +500,10 @@ fn test_validate_module_info() {
         ModuleInfo(wrap(Utf8(Cow::from("@")))),
         "Invalid module name"
     );
-    assert_validate_panics!(ModuleInfo(wrap(Utf8Bytes(&[]))));
+    assert_validate_fails!(
+        ModuleInfo(wrap(Utf8Bytes(&[]))),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
     assert_validate_fails!(
         ModuleInfo(wrap(Zero)),
         "Unexpected constant pool reference type"
@@ -513,7 +518,10 @@ fn test_validate_invoke_package_info() {
         PackageInfo(wrap(Utf8(Cow::from("")))),
         "Invalid binary name"
     );
-    assert_validate_panics!(PackageInfo(wrap(Utf8Bytes(&[]))));
+    assert_validate_fails!(
+        PackageInfo(wrap(Utf8Bytes(&[]))),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
     assert_validate_fails!(
         PackageInfo(wrap(Zero)),
         "Unexpected constant pool reference type"

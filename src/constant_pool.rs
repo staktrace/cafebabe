@@ -868,3 +868,6 @@ impl<'a> Iterator for ConstantPoolIter<'a> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests;

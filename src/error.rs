@@ -39,7 +39,7 @@ macro_rules! fail {
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ParseError {
     msg: String,
     contexts: Vec<String>,

@@ -179,29 +179,34 @@ impl<'a> ConstantPoolEntry<'a> {
 
     fn validate(&self, major_version: u16) -> Result<bool, ParseError> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_classinfo_name()?),
-            ConstantPoolEntry::String(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
-            ConstantPoolEntry::FieldRef(x, y) => Ok(
-                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? &&
-                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
-                y.borrow().get().validate_field_descriptor()?
-            ),
-            ConstantPoolEntry::MethodRef(x, y) => Ok(
-                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? &&
-                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
-                y.borrow().get().validate_method_descriptor()?
-            ),
-            ConstantPoolEntry::InterfaceMethodRef(x, y) => Ok(
-                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)? &&
-                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
-                y.borrow().get().validate_method_descriptor()?
-            ),
-            ConstantPoolEntry::NameAndType(x, y) => Ok(
-                x.ensure_type(ConstantPoolEntryTypes::UTF8)? &&
-                x.borrow().get().validate_unqualified_name()? &&
-                y.ensure_type(ConstantPoolEntryTypes::UTF8)?
+            ConstantPoolEntry::ClassInfo(x) => {
+                x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
+                x.borrow().get().validate_classinfo_name()
+            }
+            ConstantPoolEntry::String(x) => {
+                x.ensure_type(ConstantPoolEntryTypes::UTF8)
+            }
+            ConstantPoolEntry::FieldRef(x, y) => {
+                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)?;
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
+                y.borrow().get().validate_field_descriptor()
+            }
+            ConstantPoolEntry::MethodRef(x, y) => {
+                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)?;
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
+                y.borrow().get().validate_method_descriptor()
+            }
+            ConstantPoolEntry::InterfaceMethodRef(x, y) => {
+                x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)?;
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
+                y.borrow().get().validate_method_descriptor()
+            }
+            ConstantPoolEntry::NameAndType(x, y) => {
+                x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
+                x.borrow().get().validate_unqualified_name()?;
+                y.ensure_type(ConstantPoolEntryTypes::UTF8)
                 // y is validated as part of FieldRef/MethodRef/InterfaceMethodRef/Dynamic/InvokeDynamic pool item validation
-            ),
+            }
             ConstantPoolEntry::MethodHandle(x, y) => y.ensure_type(match x {
                 ReferenceKind::GetField |
                 ReferenceKind::GetStatic |
@@ -213,17 +218,26 @@ impl<'a> ConstantPoolEntry<'a> {
                 ReferenceKind::InvokeSpecial => if major_version < 52 { ConstantPoolEntryTypes::METHOD_REF } else { ConstantPoolEntryTypes::NEW_METHOD_REFS },
                 ReferenceKind::InvokeInterface => ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
             }),
-            ConstantPoolEntry::MethodType(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_method_descriptor()?),
-            ConstantPoolEntry::Dynamic(_, y) => Ok(
-                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
-                y.borrow().get().validate_field_descriptor()?
-            ),
-            ConstantPoolEntry::InvokeDynamic(_, y) => Ok(
-                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)? &&
-                y.borrow().get().validate_method_descriptor()?
-            ),
-            ConstantPoolEntry::ModuleInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_module_name()?),
-            ConstantPoolEntry::PackageInfo(x) => Ok(x.ensure_type(ConstantPoolEntryTypes::UTF8)? && x.borrow().get().validate_binary_name()?),
+            ConstantPoolEntry::MethodType(x) => {
+                x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
+                x.borrow().get().validate_method_descriptor()
+            }
+            ConstantPoolEntry::Dynamic(_, y) => {
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
+                y.borrow().get().validate_field_descriptor()
+            }
+            ConstantPoolEntry::InvokeDynamic(_, y) => {
+                y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
+                y.borrow().get().validate_method_descriptor()
+            }
+            ConstantPoolEntry::ModuleInfo(x) => {
+                x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
+                x.borrow().get().validate_module_name()
+            }
+            ConstantPoolEntry::PackageInfo(x) => {
+                x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
+                x.borrow().get().validate_binary_name()
+            }
 
             // Entry types that do not reference other entries:
             ConstantPoolEntry::Zero |

@@ -672,8 +672,7 @@ pub(crate) fn read_cp_memberref<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     // The caller can restrict the specific member types allowed here such
     // that we return an Err if it's not one of the allowed types.
-    // assert on the bool because we should never get Ok(false).
-    assert!(cp_ref.ensure_type(allowed)?);
+    cp_ref.ensure_type(allowed)?;
     match cp_ref.deref() {
         ConstantPoolEntry::FieldRef(c, m) |
         ConstantPoolEntry::MethodRef(c, m) |

@@ -40,7 +40,7 @@ impl<'a> ConstantPoolRef<'a> {
 
 trait RefCellDeref<'a> {
     fn resolve(&self, cp_index: usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<(), ParseError>;
-    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, ParseError>;
+    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<(), ParseError>;
 }
 
 impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
@@ -48,7 +48,7 @@ impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
         self.borrow_mut().resolve(cp_index, pool)
     }
 
-    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, ParseError> {
+    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<(), ParseError> {
         self.borrow().get().ensure_type(allowed)
     }
 }
@@ -177,7 +177,7 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
-    fn validate(&self, major_version: u16) -> Result<bool, ParseError> {
+    fn validate(&self, major_version: u16) -> Result<(), ParseError> {
         match self {
             ConstantPoolEntry::ClassInfo(x) => {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
@@ -247,13 +247,13 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::Float(_) |
             ConstantPoolEntry::Long(_) |
             ConstantPoolEntry::Double(_) |
-            ConstantPoolEntry::Unused => Ok(true),
+            ConstantPoolEntry::Unused => Ok(()),
         }
     }
 
-    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<bool, ParseError> {
+    fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<(), ParseError> {
         if allowed.contains(self.get_type()) {
-            Ok(true)
+            Ok(())
         } else {
             fail!("Unexpected constant pool reference type")
         }
@@ -270,45 +270,45 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
-    fn validate_classinfo_name(&self) -> Result<bool, ParseError> {
+    fn validate_classinfo_name(&self) -> Result<(), ParseError> {
         let x = self.str()?;
         // Per 4.4.1, classinfo names are allowed to be array descriptors too. This happens in the java 16 modules file.
         if is_binary_name(x) || is_array_descriptor(x) {
-            Ok(true)
+            Ok(())
         } else {
             fail!("Invalid binary name")
         }
     }
 
-    fn validate_binary_name(&self) -> Result<bool, ParseError> {
+    fn validate_binary_name(&self) -> Result<(), ParseError> {
         if is_binary_name(self.str()?) {
-            Ok(true)
+            Ok(())
         } else {
             fail!("Invalid binary name")
         }
     }
 
-    fn validate_unqualified_name(&self) -> Result<bool, ParseError> {
+    fn validate_unqualified_name(&self) -> Result<(), ParseError> {
         if is_unqualified_name(self.str()?, true, false) {
-            Ok(true)
+            Ok(())
         } else {
             fail!("Invalid unqualified name")
         }
     }
 
-    fn validate_module_name(&self) -> Result<bool, ParseError> {
+    fn validate_module_name(&self) -> Result<(), ParseError> {
         if is_module_name(self.str()?) {
-            Ok(true)
+            Ok(())
         } else {
             fail!("Invalid module name")
         }
     }
 
-    fn validate_field_descriptor(&self) -> Result<bool, ParseError> {
+    fn validate_field_descriptor(&self) -> Result<(), ParseError> {
         match self {
             ConstantPoolEntry::NameAndType(_, y) => {
                 if is_field_descriptor(&y.borrow().get().str()?) {
-                    Ok(true)
+                    Ok(())
                 } else {
                     fail!("Invalid field descriptor")
                 }
@@ -317,14 +317,14 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
-    fn validate_method_descriptor(&self) -> Result<bool, ParseError> {
+    fn validate_method_descriptor(&self) -> Result<(), ParseError> {
         match self {
             ConstantPoolEntry::NameAndType(_, y) => {
                 y.borrow().get().validate_method_descriptor()
             }
             _ => {
                 if is_method_descriptor(self.str()?) {
-                    Ok(true)
+                    Ok(())
                 } else {
                     fail!("Invalid method descriptor")
                 }
@@ -493,8 +493,7 @@ fn resolve_constant_pool(constant_pool: &[Rc<ConstantPoolEntry>]) -> Result<(), 
 
 fn validate_constant_pool(constant_pool: &[Rc<ConstantPoolEntry>], major_version: u16) -> Result<(), ParseError> {
     for (i, cp_entry) in constant_pool.iter().enumerate() {
-        let valid = cp_entry.validate(major_version).map_err(|e| err!(e, "constant pool entry {}", i))?;
-        assert!(valid); // validate functions should never return Ok(false)
+        cp_entry.validate(major_version).map_err(|e| err!(e, "constant pool entry {}", i))?;
     }
     Ok(())
 }

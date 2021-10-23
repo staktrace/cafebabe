@@ -3,10 +3,10 @@ use ConstantPoolEntry::*;
 
 macro_rules! assert_validate_passes {
     ($entry:expr) => {
-        assert_eq!($entry.validate(0), Ok(true));
+        assert_eq!($entry.validate(0), Ok(()));
     };
     ($version:literal, $entry:expr) => {
-        assert_eq!($entry.validate($version), Ok(true));
+        assert_eq!($entry.validate($version), Ok(()));
     };
 }
 

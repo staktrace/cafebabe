@@ -293,11 +293,6 @@ impl<'a> ConstantPoolEntry<'a> {
     fn validate_field_descriptor(&self) -> Result<bool, ParseError> {
         match self {
             ConstantPoolEntry::NameAndType(_, y) => {
-                // Call ensure_type to fail with an error rather than panicking if we happen to be
-                // in the process of validating a FieldRef constant pool entry whose NameAndType
-                // points to a later entry in the constant pool that hasn't been validated yet.
-                // assert on the bool because we should never get Ok(false).
-                assert!(y.ensure_type(ConstantPoolEntryTypes::UTF8)?);
                 if is_field_descriptor(&y.borrow().get().str()?) {
                     Ok(true)
                 } else {
@@ -311,11 +306,6 @@ impl<'a> ConstantPoolEntry<'a> {
     fn validate_method_descriptor(&self) -> Result<bool, ParseError> {
         match self {
             ConstantPoolEntry::NameAndType(_, y) => {
-                // Call ensure_type to fail with an error rather than panicking if we happen to be
-                // in the process of validating a [Interface]MethodRef constant pool entry whose NameAndType
-                // points to a later entry in the constant pool that hasn't been validated yet.
-                // assert on the bool because we should never get Ok(false).
-                assert!(y.ensure_type(ConstantPoolEntryTypes::UTF8)?);
                 y.borrow().get().validate_method_descriptor()
             }
             _ => {

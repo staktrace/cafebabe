@@ -345,23 +345,16 @@ fn test_validate_method_handle() {
                 )),
             ))
         ));
-        assert_validate_passes!(
-            52, // Major version
-            MethodHandle(
-                kind,
-                wrap(InterfaceMethodRef(
-                    wrap(ClassInfo(wrap(Utf8(Cow::from("some/package/Class"))))),
-                    wrap(NameAndType(
-                        wrap(Utf8(Cow::from("someMethod"))),
-                        wrap(Utf8(Cow::from("()V"))),
-                    )),
-                ))
-            )
-        );
 
-        assert_validate_fails!(
-            51, // Major version
-            MethodHandle(
+        for attempt in 0..VERSION_ATTEMPTS {
+            // Ensure interesting versions are covered.
+            let version = match attempt {
+                0 => 51,
+                1 => 52,
+                _ => random_version(),
+            };
+
+            let entry = MethodHandle(
                 kind,
                 wrap(InterfaceMethodRef(
                     wrap(ClassInfo(wrap(Utf8(Cow::from("some/package/Class"))))),
@@ -369,10 +362,16 @@ fn test_validate_method_handle() {
                         wrap(Utf8(Cow::from("someMethod"))),
                         wrap(Utf8(Cow::from("()V"))),
                     )),
-                ))
-            ),
-            "Unexpected constant pool reference type"
-        );
+                )),
+            );
+
+            if version >= 52 {
+                assert_validate_passes!(version, entry);
+            } else {
+                assert_validate_fails!(version, entry, "Unexpected constant pool reference type");
+            }
+        }
+
         assert_validate_fails!(
             MethodHandle(kind, wrap(Zero)),
             "Unexpected constant pool reference type"

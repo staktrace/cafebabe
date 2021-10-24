@@ -3,9 +3,14 @@ use rand;
 use rand::Rng;
 use ConstantPoolEntry::*;
 
+/// How many random version numbers to try if test does not specify version.
+const VERSION_ATTEMPTS: usize = 10;
+
 macro_rules! assert_validate_passes {
     ($entry:expr) => {
-        assert_validate_passes!(random_version(), $entry);
+        for _ in 0..VERSION_ATTEMPTS {
+            assert_validate_passes!(random_version(), $entry);
+        }
     };
     ($version:expr, $entry:expr) => {
         assert_eq!($entry.validate($version), Ok(()), "version = {}", $version);
@@ -14,7 +19,9 @@ macro_rules! assert_validate_passes {
 
 macro_rules! assert_validate_fails {
     ($entry:expr, $message:literal) => {
-        assert_validate_fails!(random_version(), $entry, $message);
+        for _ in 0..VERSION_ATTEMPTS {
+            assert_validate_fails!(random_version(), $entry, $message);
+        }
     };
     ($version:expr, $entry:expr, $message:literal) => {
         assert_eq!(

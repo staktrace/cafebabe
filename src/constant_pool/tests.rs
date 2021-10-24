@@ -1,9 +1,11 @@
 use super::*;
+use rand;
+use rand::Rng;
 use ConstantPoolEntry::*;
 
 macro_rules! assert_validate_passes {
     ($entry:expr) => {
-        assert_validate_passes!(0, $entry);
+        assert_validate_passes!(random_version(), $entry);
     };
     ($version:expr, $entry:expr) => {
         assert_eq!($entry.validate($version), Ok(()), "version = {}", $version);
@@ -12,7 +14,7 @@ macro_rules! assert_validate_passes {
 
 macro_rules! assert_validate_fails {
     ($entry:expr, $message:literal) => {
-        assert_validate_fails!(0, $entry, $message);
+        assert_validate_fails!(random_version(), $entry, $message);
     };
     ($version:expr, $entry:expr, $message:literal) => {
         assert_eq!(
@@ -22,6 +24,22 @@ macro_rules! assert_validate_fails {
             $version,
         );
     };
+}
+
+/// Returns a random major class file version.
+/// Might return a "realistic" version number or a completely random u16.
+fn random_version() -> u16 {
+    let mut rng = rand::thread_rng();
+
+    // High chance of returning a realistic version number.
+    if rng.gen_bool(0.8) {
+        // Choose among version numbers currently assigned or likely to be
+        // assigned in future releases of Java. Java 1.0.2: 45, Java 17: 61.
+        rng.gen_range(40..140)
+    } else {
+        // Completely random value.
+        rng.gen()
+    }
 }
 
 // Helper for creating the smart pointer types (RefCell, ConstantPoolRef,

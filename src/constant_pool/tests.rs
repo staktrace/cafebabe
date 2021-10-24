@@ -1,9 +1,15 @@
 use super::*;
 use ConstantPoolEntry::*;
 
+/// Version numbers currently assigned or likely to be assigned in
+/// future releases of Java. Java 1.0.2: 45, Java 17: 61.
+const VERSIONS : std::ops::Range<u16> = 45..145;
+
 macro_rules! assert_validate_passes {
     ($entry:expr) => {
-        assert_validate_passes!(0, $entry);
+        for version in VERSIONS {
+            assert_validate_passes!(version, $entry);
+        }
     };
     ($version:expr, $entry:expr) => {
         assert_eq!($entry.validate($version), Ok(()), "version = {}", $version);
@@ -12,7 +18,9 @@ macro_rules! assert_validate_passes {
 
 macro_rules! assert_validate_fails {
     ($entry:expr, $message:literal) => {
-        assert_validate_fails!(0, $entry, $message);
+        for version in VERSIONS {
+            assert_validate_fails!(version, $entry, $message);
+        }
     };
     ($version:expr, $entry:expr, $message:literal) => {
         assert_eq!(
@@ -320,23 +328,9 @@ fn test_validate_method_handle() {
                 )),
             ))
         ));
-        assert_validate_passes!(
-            52, // Major version
-            MethodHandle(
-                kind,
-                wrap(InterfaceMethodRef(
-                    wrap(ClassInfo(wrap(Utf8(Cow::from("some/package/Class"))))),
-                    wrap(NameAndType(
-                        wrap(Utf8(Cow::from("someMethod"))),
-                        wrap(Utf8(Cow::from("()V"))),
-                    )),
-                ))
-            )
-        );
 
-        assert_validate_fails!(
-            51, // Major version
-            MethodHandle(
+        for version in VERSIONS {
+            let entry = MethodHandle(
                 kind,
                 wrap(InterfaceMethodRef(
                     wrap(ClassInfo(wrap(Utf8(Cow::from("some/package/Class"))))),
@@ -344,10 +338,16 @@ fn test_validate_method_handle() {
                         wrap(Utf8(Cow::from("someMethod"))),
                         wrap(Utf8(Cow::from("()V"))),
                     )),
-                ))
-            ),
-            "Unexpected constant pool reference type"
-        );
+                )),
+            );
+
+            if version >= 52 {
+                assert_validate_passes!(version, entry);
+            } else {
+                assert_validate_fails!(version, entry, "Unexpected constant pool reference type");
+            }
+        }
+
         assert_validate_fails!(
             MethodHandle(kind, wrap(Zero)),
             "Unexpected constant pool reference type"

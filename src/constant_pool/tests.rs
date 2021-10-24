@@ -6,7 +6,7 @@ macro_rules! assert_validate_passes {
         assert_validate_passes!(0, $entry);
     };
     ($version:expr, $entry:expr) => {
-        assert_eq!($entry.validate($version), Ok(()));
+        assert_eq!($entry.validate($version), Ok(()), "version = {}", $version);
     };
 }
 
@@ -17,7 +17,9 @@ macro_rules! assert_validate_fails {
     ($version:expr, $entry:expr, $message:literal) => {
         assert_eq!(
             $entry.validate($version),
-            Err(ParseError::new($message.to_string()))
+            Err(ParseError::new($message.to_string())),
+            "version = {}",
+            $version,
         );
     };
 }

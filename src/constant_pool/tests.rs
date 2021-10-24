@@ -3,7 +3,7 @@ use ConstantPoolEntry::*;
 
 macro_rules! assert_validate_passes {
     ($entry:expr) => {
-        assert_eq!($entry.validate(0), Ok(()));
+        assert_validate_passes!(0, $entry);
     };
     ($version:literal, $entry:expr) => {
         assert_eq!($entry.validate($version), Ok(()));
@@ -12,10 +12,7 @@ macro_rules! assert_validate_passes {
 
 macro_rules! assert_validate_fails {
     ($entry:expr, $message:literal) => {
-        assert_eq!(
-            $entry.validate(0),
-            Err(ParseError::new($message.to_string()))
-        );
+        assert_validate_fails!(0, $entry, $message);
     };
     ($version:literal, $entry:expr, $message:literal) => {
         assert_eq!(

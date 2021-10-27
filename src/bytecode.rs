@@ -229,7 +229,7 @@ impl<'a> ByteCode<'a> {
     /// `self.opcodes` of the corresponding opcode. If there is no corresponding
     /// opcode at that offset, returns None.
     pub fn get_opcode_index(&self, offset: usize) -> Option<usize> {
-        let mut min = 0 as usize;
+        let mut min = 0_usize;
         let mut max = self.opcodes.len();
         while min < max {
             let mid = (min + max) / 2;

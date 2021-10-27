@@ -342,7 +342,7 @@ impl<'a> ConstantPoolEntry<'a> {
     fn validate_field_descriptor(&self) -> Result<(), ParseError> {
         match self {
             ConstantPoolEntry::NameAndType(_, y) => {
-                if is_field_descriptor(&y.borrow().get().str()?) {
+                if is_field_descriptor(y.borrow().get().str()?) {
                     Ok(())
                 } else {
                     fail!("Invalid field descriptor")

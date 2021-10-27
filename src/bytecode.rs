@@ -655,7 +655,7 @@ fn read_opcodes<'a>(
                     0x3a => Opcode::Astore(read_u2(code, &mut ix)?),
                     0x84 => Opcode::Iinc(read_u2(code, &mut ix)?, read_u2(code, &mut ix)? as i16),
                     0xa9 => Opcode::Ret(read_u2(code, &mut ix)?),
-                    v @ _ => fail!(
+                    v => fail!(
                         "Unexpected opcode {} inside wide modifier at index {}",
                         v,
                         ix - 1
@@ -673,7 +673,7 @@ fn read_opcodes<'a>(
             0xca => Opcode::Breakpoint,
             0xfe => Opcode::Impdep1,
             0xff => Opcode::Impdep2,
-            v @ _ => fail!("Unexpected opcode {} at index {}", v, ix - 1),
+            v => fail!("Unexpected opcode {} at index {}", v, ix - 1),
         };
         opcodes.push((opcode_ix, opcode));
     }

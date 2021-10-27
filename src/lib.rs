@@ -343,6 +343,7 @@ impl ParseOptions {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError> {
     parse_class_with_options(raw_bytes, &ParseOptions::default())
 }

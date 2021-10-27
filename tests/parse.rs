@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::fs::{File, read_dir, remove_file};
+use std::fs::{read_dir, remove_file, File};
 use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};

@@ -3,7 +3,7 @@ use ConstantPoolEntry::*;
 
 /// Version numbers currently assigned or likely to be assigned in
 /// future releases of Java. Java 1.0.2: 45, Java 17: 61.
-const VERSIONS : std::ops::Range<u16> = 45..145;
+const VERSIONS: std::ops::Range<u16> = 45..145;
 
 macro_rules! assert_validate_passes {
     ($entry:expr) => {

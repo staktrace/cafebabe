@@ -2,9 +2,13 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
+use crate::constant_pool::{
+    get_cp_loadable, read_cp_classinfo, read_cp_invokedynamic, read_cp_memberref,
+};
+use crate::constant_pool::{
+    ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
+};
 use crate::{read_u1, read_u2, read_u4, ParseError};
-use crate::constant_pool::{get_cp_loadable, read_cp_classinfo, read_cp_invokedynamic, read_cp_memberref};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef};
 
 pub type JumpOffset = i32;
 
@@ -133,7 +137,7 @@ pub enum Opcode<'a> {
     Ifnonnull(JumpOffset),
     Ifnull(JumpOffset),
     Iinc(u16, i16), // both wide and narrow
-    Iload(u16), // both wide and narrow
+    Iload(u16),     // both wide and narrow
     Impdep1,
     Impdep2,
     Imul,
@@ -210,9 +214,12 @@ pub struct ByteCode<'a> {
 }
 
 impl<'a> ByteCode<'a> {
-    pub(crate) fn from(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Self, ParseError> {
+    pub(crate) fn from(
+        code: &'a [u8],
+        pool: &[Rc<ConstantPoolEntry<'a>>],
+    ) -> Result<Self, ParseError> {
         let bytecode = Self {
-            opcodes: read_opcodes(code, pool)?
+            opcodes: read_opcodes(code, pool)?,
         };
         bytecode.validate_jumps()?;
         Ok(bytecode)
@@ -242,7 +249,8 @@ impl<'a> ByteCode<'a> {
     }
 
     fn validate_jump(&self, source_offset: i32, jump: JumpOffset) -> Result<(), ParseError> {
-        let target_offset = usize::try_from(source_offset + jump).map_err(|_| err!("Invalid destination after applying jump"))?;
+        let target_offset = usize::try_from(source_offset + jump)
+            .map_err(|_| err!("Invalid destination after applying jump"))?;
         if self.get_opcode_index(target_offset).is_none() {
             fail!("Invalid opcode offset after applying jump");
         }
@@ -250,36 +258,41 @@ impl<'a> ByteCode<'a> {
     }
 
     fn validate_opcode_jumps(&self, offset: &usize, opcode: &Opcode) -> Result<(), ParseError> {
-        let source_offset = i32::try_from(*offset).map_err(|_| err!("Unable to convert offset to i32"))?;
+        let source_offset =
+            i32::try_from(*offset).map_err(|_| err!("Unable to convert offset to i32"))?;
         match opcode {
-            Opcode::Goto(j) |
-            Opcode::IfAcmpeq(j) |
-            Opcode::IfAcmpne(j) |
-            Opcode::IfIcmpeq(j) |
-            Opcode::IfIcmpge(j) |
-            Opcode::IfIcmpgt(j) |
-            Opcode::IfIcmple(j) |
-            Opcode::IfIcmplt(j) |
-            Opcode::IfIcmpne(j) |
-            Opcode::Ifeq(j) |
-            Opcode::Ifge(j) |
-            Opcode::Ifgt(j) |
-            Opcode::Ifle(j) |
-            Opcode::Iflt(j) |
-            Opcode::Ifne(j) |
-            Opcode::Ifnonnull(j) |
-            Opcode::Ifnull(j) |
-            Opcode::Jsr(j) => self.validate_jump(source_offset, *j)?,
+            Opcode::Goto(j)
+            | Opcode::IfAcmpeq(j)
+            | Opcode::IfAcmpne(j)
+            | Opcode::IfIcmpeq(j)
+            | Opcode::IfIcmpge(j)
+            | Opcode::IfIcmpgt(j)
+            | Opcode::IfIcmple(j)
+            | Opcode::IfIcmplt(j)
+            | Opcode::IfIcmpne(j)
+            | Opcode::Ifeq(j)
+            | Opcode::Ifge(j)
+            | Opcode::Ifgt(j)
+            | Opcode::Ifle(j)
+            | Opcode::Iflt(j)
+            | Opcode::Ifne(j)
+            | Opcode::Ifnonnull(j)
+            | Opcode::Ifnull(j)
+            | Opcode::Jsr(j) => self.validate_jump(source_offset, *j)?,
             Opcode::Lookupswitch(table) => {
-                self.validate_jump(source_offset, table.default).map_err(|e| err!(e, "default jump offset"))?;
+                self.validate_jump(source_offset, table.default)
+                    .map_err(|e| err!(e, "default jump offset"))?;
                 for (i, jump) in &table.match_offsets {
-                    self.validate_jump(source_offset, *jump).map_err(|e| err!(e, "match offset {}", i))?;
+                    self.validate_jump(source_offset, *jump)
+                        .map_err(|e| err!(e, "match offset {}", i))?;
                 }
             }
             Opcode::Tableswitch(table) => {
-                self.validate_jump(source_offset, table.default).map_err(|e| err!(e, "default jump offset"))?;
+                self.validate_jump(source_offset, table.default)
+                    .map_err(|e| err!(e, "default jump offset"))?;
                 for (i, jump) in table.jumps.iter().enumerate() {
-                    self.validate_jump(source_offset, *jump).map_err(|e| err!(e, "range offset {}", i))?;
+                    self.validate_jump(source_offset, *jump)
+                        .map_err(|e| err!(e, "range offset {}", i))?;
                 }
             }
             _ => (),
@@ -289,13 +302,17 @@ impl<'a> ByteCode<'a> {
 
     fn validate_jumps(&self) -> Result<(), ParseError> {
         for (offset, opcode) in &self.opcodes {
-            self.validate_opcode_jumps(offset, opcode).map_err(|e| err!(e, "opcode at offset {}", offset))?;
+            self.validate_opcode_jumps(offset, opcode)
+                .map_err(|e| err!(e, "opcode at offset {}", offset))?;
         }
         Ok(())
     }
 }
 
-fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<(usize, Opcode<'a>)>, ParseError> {
+fn read_opcodes<'a>(
+    code: &'a [u8],
+    pool: &[Rc<ConstantPoolEntry<'a>>],
+) -> Result<Vec<(usize, Opcode<'a>)>, ParseError> {
     let mut opcodes = Vec::new();
     let mut ix = 0;
     while ix < code.len() {
@@ -433,7 +450,10 @@ fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Resul
             0x81 => Opcode::Lor,
             0x82 => Opcode::Ixor,
             0x83 => Opcode::Lxor,
-            0x84 => Opcode::Iinc(read_u1(code, &mut ix)?.into(), (read_u1(code, &mut ix)? as i8).into()),
+            0x84 => Opcode::Iinc(
+                read_u1(code, &mut ix)?.into(),
+                (read_u1(code, &mut ix)? as i8).into(),
+            ),
             0x85 => Opcode::I2l,
             0x86 => Opcode::I2f,
             0x87 => Opcode::I2d,
@@ -482,7 +502,10 @@ fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Resul
                 }
                 let jump_count = match usize::try_from(high - low + 1) {
                     Ok(n) => n,
-                    _ => fail!("Unable to convert range to usize in tableswitch at index {}", ix - 4),
+                    _ => fail!(
+                        "Unable to convert range to usize in tableswitch at index {}",
+                        ix - 4
+                    ),
                 };
                 let mut jumps = Vec::with_capacity(jump_count);
                 for _ in 0..jump_count {
@@ -501,11 +524,17 @@ fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Resul
                 let default = read_u4(code, &mut ix)? as JumpOffset;
                 let npairs = read_u4(code, &mut ix)? as i32;
                 if npairs < 0 {
-                    fail!("Number of pairs in lookupswitch must be non-negative at index {}", ix - 4);
+                    fail!(
+                        "Number of pairs in lookupswitch must be non-negative at index {}",
+                        ix - 4
+                    );
                 }
                 let pair_count = match usize::try_from(npairs) {
                     Ok(n) => n,
-                    _ => fail!("Unable to convert number of pairs in lookupswitch to usize at index {}", ix - 4),
+                    _ => fail!(
+                        "Unable to convert number of pairs in lookupswitch to usize at index {}",
+                        ix - 4
+                    ),
                 };
                 let mut match_offsets = Vec::with_capacity(pair_count);
                 for _ in 0..pair_count {
@@ -524,15 +553,55 @@ fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Resul
             0xaf => Opcode::Dreturn,
             0xb0 => Opcode::Areturn,
             0xb1 => Opcode::Return,
-            0xb2 => Opcode::Getstatic(read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::FIELD_REF)?),
-            0xb3 => Opcode::Putstatic(read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::FIELD_REF)?),
-            0xb4 => Opcode::Getfield(read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::FIELD_REF)?),
-            0xb5 => Opcode::Putfield(read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::FIELD_REF)?),
-            0xb6 => Opcode::Invokevirtual(read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::METHOD_REF)?),
-            0xb7 => Opcode::Invokespecial(read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::NEW_METHOD_REFS)?),
-            0xb8 => Opcode::Invokestatic(read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::NEW_METHOD_REFS)?),
+            0xb2 => Opcode::Getstatic(read_cp_memberref(
+                code,
+                &mut ix,
+                pool,
+                ConstantPoolEntryTypes::FIELD_REF,
+            )?),
+            0xb3 => Opcode::Putstatic(read_cp_memberref(
+                code,
+                &mut ix,
+                pool,
+                ConstantPoolEntryTypes::FIELD_REF,
+            )?),
+            0xb4 => Opcode::Getfield(read_cp_memberref(
+                code,
+                &mut ix,
+                pool,
+                ConstantPoolEntryTypes::FIELD_REF,
+            )?),
+            0xb5 => Opcode::Putfield(read_cp_memberref(
+                code,
+                &mut ix,
+                pool,
+                ConstantPoolEntryTypes::FIELD_REF,
+            )?),
+            0xb6 => Opcode::Invokevirtual(read_cp_memberref(
+                code,
+                &mut ix,
+                pool,
+                ConstantPoolEntryTypes::METHOD_REF,
+            )?),
+            0xb7 => Opcode::Invokespecial(read_cp_memberref(
+                code,
+                &mut ix,
+                pool,
+                ConstantPoolEntryTypes::NEW_METHOD_REFS,
+            )?),
+            0xb8 => Opcode::Invokestatic(read_cp_memberref(
+                code,
+                &mut ix,
+                pool,
+                ConstantPoolEntryTypes::NEW_METHOD_REFS,
+            )?),
             0xb9 => {
-                let interfacemethod = read_cp_memberref(code, &mut ix, pool, ConstantPoolEntryTypes::INTERFACE_METHOD_REF)?;
+                let interfacemethod = read_cp_memberref(
+                    code,
+                    &mut ix,
+                    pool,
+                    ConstantPoolEntryTypes::INTERFACE_METHOD_REF,
+                )?;
                 let count = read_u1(code, &mut ix)?;
                 if read_u1(code, &mut ix)? != 0 {
                     fail!("Nonzero byte found where zero byte expected in invokeinterface opcode at index {}", ix - 1);
@@ -557,7 +626,10 @@ fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Resul
                     9 => PrimitiveArrayType::Short,
                     10 => PrimitiveArrayType::Int,
                     11 => PrimitiveArrayType::Long,
-                    _ => fail!("Unexpected array type for newarray opcode at index {}", ix - 1),
+                    _ => fail!(
+                        "Unexpected array type for newarray opcode at index {}",
+                        ix - 1
+                    ),
                 };
                 Opcode::Newarray(primitive_type)
             }
@@ -583,10 +655,17 @@ fn read_opcodes<'a>(code: &'a [u8], pool: &[Rc<ConstantPoolEntry<'a>>]) -> Resul
                     0x3a => Opcode::Astore(read_u2(code, &mut ix)?),
                     0x84 => Opcode::Iinc(read_u2(code, &mut ix)?, read_u2(code, &mut ix)? as i16),
                     0xa9 => Opcode::Ret(read_u2(code, &mut ix)?),
-                    v @ _ => fail!("Unexpected opcode {} inside wide modifier at index {}", v, ix - 1),
+                    v @ _ => fail!(
+                        "Unexpected opcode {} inside wide modifier at index {}",
+                        v,
+                        ix - 1
+                    ),
                 }
             }
-            0xc5 => Opcode::Multianewarray(read_cp_classinfo(code, &mut ix, pool)?, read_u1(code, &mut ix)?),
+            0xc5 => Opcode::Multianewarray(
+                read_cp_classinfo(code, &mut ix, pool)?,
+                read_u1(code, &mut ix)?,
+            ),
             0xc6 => Opcode::Ifnull((read_u2(code, &mut ix)? as i16).into()),
             0xc7 => Opcode::Ifnonnull((read_u2(code, &mut ix)? as i16).into()),
             0xc8 => Opcode::Goto(read_u4(code, &mut ix)? as JumpOffset),
@@ -607,26 +686,18 @@ mod tests {
 
     #[test]
     fn test_get_opcode() {
-        let bytecode = ByteCode {
-            opcodes: vec![
-            ],
-        };
+        let bytecode = ByteCode { opcodes: vec![] };
         assert_eq!(bytecode.get_opcode_index(0), None);
         assert_eq!(bytecode.get_opcode_index(1), None);
 
         let bytecode = ByteCode {
-            opcodes: vec![
-                (0, Opcode::Nop),
-            ],
+            opcodes: vec![(0, Opcode::Nop)],
         };
         assert_eq!(bytecode.get_opcode_index(0), Some(0));
         assert_eq!(bytecode.get_opcode_index(1), None);
 
         let bytecode = ByteCode {
-            opcodes: vec![
-                (0, Opcode::Nop),
-                (3, Opcode::Nop),
-            ],
+            opcodes: vec![(0, Opcode::Nop), (3, Opcode::Nop)],
         };
         assert_eq!(bytecode.get_opcode_index(0), Some(0));
         assert_eq!(bytecode.get_opcode_index(1), None);
@@ -635,11 +706,7 @@ mod tests {
         assert_eq!(bytecode.get_opcode_index(4), None);
 
         let bytecode = ByteCode {
-            opcodes: vec![
-                (0, Opcode::Nop),
-                (3, Opcode::Nop),
-                (4, Opcode::Nop),
-            ],
+            opcodes: vec![(0, Opcode::Nop), (3, Opcode::Nop), (4, Opcode::Nop)],
         };
         assert_eq!(bytecode.get_opcode_index(0), Some(0));
         assert_eq!(bytecode.get_opcode_index(1), None);

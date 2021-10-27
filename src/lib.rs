@@ -15,9 +15,12 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use std::rc::Rc;
 
+use crate::attributes::{read_attributes, AttributeData, AttributeInfo};
+use crate::constant_pool::{
+    read_constant_pool, read_cp_classinfo, read_cp_classinfo_opt, read_cp_utf8, ConstantPoolEntry,
+    ConstantPoolIter,
+};
 pub use crate::error::ParseError;
-use crate::attributes::{AttributeData, AttributeInfo, read_attributes};
-use crate::constant_pool::{ConstantPoolEntry, ConstantPoolIter, read_constant_pool, read_cp_utf8, read_cp_classinfo, read_cp_classinfo_opt};
 use crate::names::{is_field_descriptor, is_method_descriptor, is_unqualified_name};
 
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
@@ -33,9 +36,7 @@ pub(crate) fn read_u2(bytes: &[u8], ix: &mut usize) -> Result<u16, ParseError> {
     if bytes.len() < *ix + 2 {
         fail!("Unexpected end of stream reading u2 at index {}", *ix);
     }
-    let result =
-        ((bytes[*ix + 0] as u16) << 8) |
-        ((bytes[*ix + 1] as u16));
+    let result = ((bytes[*ix + 0] as u16) << 8) | (bytes[*ix + 1] as u16);
     *ix += 2;
     Ok(result)
 }
@@ -44,11 +45,10 @@ pub(crate) fn read_u4(bytes: &[u8], ix: &mut usize) -> Result<u32, ParseError> {
     if bytes.len() < *ix + 4 {
         fail!("Unexpected end of stream reading u4 at index {}", *ix);
     }
-    let result =
-        ((bytes[*ix + 0] as u32) << 24) |
-        ((bytes[*ix + 1] as u32) << 16) |
-        ((bytes[*ix + 2] as u32) <<  8) |
-        ((bytes[*ix + 3] as u32));
+    let result = ((bytes[*ix + 0] as u32) << 24)
+        | ((bytes[*ix + 1] as u32) << 16)
+        | ((bytes[*ix + 2] as u32) << 8)
+        | (bytes[*ix + 3] as u32);
     *ix += 4;
     Ok(result)
 }
@@ -57,24 +57,28 @@ pub(crate) fn read_u8(bytes: &[u8], ix: &mut usize) -> Result<u64, ParseError> {
     if bytes.len() < *ix + 8 {
         fail!("Unexpected end of stream reading u8 at index {}", *ix);
     }
-    let result =
-        ((bytes[*ix + 0] as u64) << 56) |
-        ((bytes[*ix + 1] as u64) << 48) |
-        ((bytes[*ix + 2] as u64) << 40) |
-        ((bytes[*ix + 3] as u64) << 32) |
-        ((bytes[*ix + 4] as u64) << 24) |
-        ((bytes[*ix + 5] as u64) << 16) |
-        ((bytes[*ix + 6] as u64) << 8) |
-        ((bytes[*ix + 7] as u64));
+    let result = ((bytes[*ix + 0] as u64) << 56)
+        | ((bytes[*ix + 1] as u64) << 48)
+        | ((bytes[*ix + 2] as u64) << 40)
+        | ((bytes[*ix + 3] as u64) << 32)
+        | ((bytes[*ix + 4] as u64) << 24)
+        | ((bytes[*ix + 5] as u64) << 16)
+        | ((bytes[*ix + 6] as u64) << 8)
+        | (bytes[*ix + 7] as u64);
     *ix += 8;
     Ok(result)
 }
 
-fn read_interfaces<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>]) -> Result<Vec<Cow<'a, str>>, ParseError> {
+fn read_interfaces<'a>(
+    bytes: &'a [u8],
+    ix: &mut usize,
+    pool: &[Rc<ConstantPoolEntry<'a>>],
+) -> Result<Vec<Cow<'a, str>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut interfaces = Vec::with_capacity(count.into());
     for i in 0..count {
-        interfaces.push(read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "interface {}", i))?);
+        interfaces
+            .push(read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "interface {}", i))?);
     }
     Ok(interfaces)
 }
@@ -129,25 +133,36 @@ pub struct FieldInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-fn read_fields<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], opts: &ParseOptions) -> Result<Vec<FieldInfo<'a>>, ParseError> {
+fn read_fields<'a>(
+    bytes: &'a [u8],
+    ix: &mut usize,
+    pool: &[Rc<ConstantPoolEntry<'a>>],
+    opts: &ParseOptions,
+) -> Result<Vec<FieldInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut fields = Vec::with_capacity(count.into());
     let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
-        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class field {}", i))?;
+        let name =
+            read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class field {}", i))?;
         if !is_unqualified_name(&name, false, false) {
             fail!("Invalid unqualified name for class field {}", i);
         }
-        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of class field {}", i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool)
+            .map_err(|e| err!(e, "descriptor of class field {}", i))?;
         if !is_field_descriptor(&descriptor) {
             fail!("Invalid descriptor for class field {}", i);
         }
         let unique_id = (name.clone(), descriptor.clone());
         if !unique_ids.insert(unique_id) {
-            fail!("Class field {} is duplicate of previously-encountered field", i);
+            fail!(
+                "Class field {} is duplicate of previously-encountered field",
+                i
+            );
         }
-        let attributes = read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "class field {}", i))?;
+        let attributes =
+            read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "class field {}", i))?;
         fields.push(FieldInfo {
             access_flags,
             name,
@@ -183,18 +198,27 @@ pub struct MethodInfo<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntry<'a>>], opts: &ParseOptions, in_interface: bool, major_version: u16) -> Result<Vec<MethodInfo<'a>>, ParseError> {
+fn read_methods<'a>(
+    bytes: &'a [u8],
+    ix: &mut usize,
+    pool: &[Rc<ConstantPoolEntry<'a>>],
+    opts: &ParseOptions,
+    in_interface: bool,
+    major_version: u16,
+) -> Result<Vec<MethodInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
     let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
     for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
-        let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class method {}", i))?;
+        let name =
+            read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class method {}", i))?;
         let allow_init = !in_interface;
         if !is_unqualified_name(&name, allow_init, true) {
             fail!("Invalid unqualified name for class method {}", i);
         }
-        let descriptor = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of class method {}", i))?;
+        let descriptor = read_cp_utf8(bytes, ix, pool)
+            .map_err(|e| err!(e, "descriptor of class method {}", i))?;
         if !is_method_descriptor(&descriptor) {
             fail!("Invalid descriptor for class method {}", i);
         }
@@ -211,9 +235,13 @@ fn read_methods<'a>(bytes: &'a [u8], ix: &mut usize, pool: &[Rc<ConstantPoolEntr
         }
         let unique_id = (name.clone(), descriptor.clone());
         if !unique_ids.insert(unique_id) {
-            fail!("Class method {} is duplicate of previously-encountered method", i);
+            fail!(
+                "Class method {} is duplicate of previously-encountered method",
+                i
+            );
         }
-        let attributes = read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "class method {}", i))?;
+        let attributes =
+            read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "class method {}", i))?;
         methods.push(MethodInfo {
             access_flags,
             name,
@@ -238,11 +266,13 @@ bitflags! {
     }
 }
 
-fn validate_bootstrap_methods<'a>(pool: &[Rc<ConstantPoolEntry<'a>>], attributes: &[AttributeInfo<'a>]) -> Result<(), ParseError> {
+fn validate_bootstrap_methods<'a>(
+    pool: &[Rc<ConstantPoolEntry<'a>>],
+    attributes: &[AttributeInfo<'a>],
+) -> Result<(), ParseError> {
     for cp_entry in pool {
         match cp_entry.deref() {
-            ConstantPoolEntry::Dynamic(x, _) |
-            ConstantPoolEntry::InvokeDynamic(x, _) => {
+            ConstantPoolEntry::Dynamic(x, _) | ConstantPoolEntry::InvokeDynamic(x, _) => {
                 let mut found = 0;
                 for attr in attributes {
                     match &attr.data {
@@ -314,7 +344,10 @@ pub fn parse_class<'a>(raw_bytes: &'a [u8]) -> Result<ClassFile<'a>, ParseError>
     parse_class_with_options(raw_bytes, &ParseOptions::default())
 }
 
-pub fn parse_class_with_options<'a>(raw_bytes: &'a [u8], opts: &ParseOptions) -> Result<ClassFile<'a>, ParseError> {
+pub fn parse_class_with_options<'a>(
+    raw_bytes: &'a [u8],
+    opts: &ParseOptions,
+) -> Result<ClassFile<'a>, ParseError> {
     let mut ix = 0;
     if read_u4(raw_bytes, &mut ix)? != 0xCAFE_BABE {
         fail!("Unexpected magic header");
@@ -327,18 +360,34 @@ pub fn parse_class_with_options<'a>(raw_bytes: &'a [u8], opts: &ParseOptions) ->
     let is_module = access_flags.contains(ClassAccessFlags::MODULE);
     if is_module {
         if major_version < 53 {
-            fail!("Found invalid MODULE class access flag on class file of major version {}", major_version);
+            fail!(
+                "Found invalid MODULE class access flag on class file of major version {}",
+                major_version
+            );
         }
         if access_flags != ClassAccessFlags::MODULE {
-            fail!("Found invalid class access flags {:?}; no other flags should be set with MODULE", access_flags);
+            fail!(
+                "Found invalid class access flags {:?}; no other flags should be set with MODULE",
+                access_flags
+            );
         }
     }
-    let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "this_class"))?;
-    let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "super_class"))?;
+    let this_class =
+        read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "this_class"))?;
+    let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool)
+        .map_err(|e| err!(e, "super_class"))?;
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool, opts)?;
-    let methods = read_methods(raw_bytes, &mut ix, &constant_pool, opts, access_flags.contains(ClassAccessFlags::INTERFACE), major_version)?;
-    let attributes = read_attributes(raw_bytes, &mut ix, &constant_pool, opts).map_err(|e| err!(e, "class"))?;
+    let methods = read_methods(
+        raw_bytes,
+        &mut ix,
+        &constant_pool,
+        opts,
+        access_flags.contains(ClassAccessFlags::INTERFACE),
+        major_version,
+    )?;
+    let attributes =
+        read_attributes(raw_bytes, &mut ix, &constant_pool, opts).map_err(|e| err!(e, "class"))?;
     // Section 4.8 "Format Checking" says the class file must not have extra bytes at the end
     if ix != raw_bytes.len() {
         fail!("Extra bytes found at index {} after reading class file", ix);
@@ -346,10 +395,16 @@ pub fn parse_class_with_options<'a>(raw_bytes: &'a [u8], opts: &ParseOptions) ->
 
     if is_module {
         if let Some(super_class) = super_class {
-            fail!("Found non-empty super_class {}; expected none for module", super_class);
+            fail!(
+                "Found non-empty super_class {}; expected none for module",
+                super_class
+            );
         }
         if !interfaces.is_empty() {
-            fail!("Found {} interfaces; expected 0 for module", interfaces.len());
+            fail!(
+                "Found {} interfaces; expected 0 for module",
+                interfaces.len()
+            );
         }
         if !fields.is_empty() {
             fail!("Found {} fields; expected 0 for module", fields.len());

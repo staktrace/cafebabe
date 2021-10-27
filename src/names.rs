@@ -13,7 +13,9 @@ pub(crate) fn is_unqualified_name(name: &str, allow_init: bool, allow_clinit: bo
     let mut chars = name.chars();
     match chars.next() {
         None => return false,
-        Some('<') => return (allow_init && name == "<init>") || (allow_clinit && name == "<clinit>"),
+        Some('<') => {
+            return (allow_init && name == "<init>") || (allow_clinit && name == "<clinit>")
+        }
         Some(x) if !is_valid_unqualified_char(x) => return false,
         Some(_) => (),
     };
@@ -102,7 +104,7 @@ pub(crate) fn is_field_descriptor(name: &str) -> bool {
     let mut chars = name.chars();
     match consume_field_descriptor(&mut chars) {
         (false, _) => false,
-        (true, _) => chars.next().is_none()
+        (true, _) => chars.next().is_none(),
     }
 }
 

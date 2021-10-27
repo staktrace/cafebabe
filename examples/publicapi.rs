@@ -11,13 +11,19 @@ fn main() {
             Ok(class) => {
                 println!("{}", class.this_class);
                 for field in class.fields {
-                    if field.access_flags.contains(cafebabe::FieldAccessFlags::PRIVATE) {
+                    if field
+                        .access_flags
+                        .contains(cafebabe::FieldAccessFlags::PRIVATE)
+                    {
                         continue;
                     }
                     println!("    {} {}", field.name, field.descriptor);
                 }
                 for method in class.methods {
-                    if method.access_flags.contains(cafebabe::MethodAccessFlags::PRIVATE) {
+                    if method
+                        .access_flags
+                        .contains(cafebabe::MethodAccessFlags::PRIVATE)
+                    {
                         continue;
                     }
                     println!("    {} {}", method.name, method.descriptor);

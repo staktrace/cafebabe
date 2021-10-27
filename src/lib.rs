@@ -32,6 +32,7 @@ pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     Ok(result)
 }
 
+#[allow(clippy::double_parens)]
 pub(crate) fn read_u2(bytes: &[u8], ix: &mut usize) -> Result<u16, ParseError> {
     if bytes.len() < *ix + 2 {
         fail!("Unexpected end of stream reading u2 at index {}", *ix);
@@ -41,6 +42,7 @@ pub(crate) fn read_u2(bytes: &[u8], ix: &mut usize) -> Result<u16, ParseError> {
     Ok(result)
 }
 
+#[allow(clippy::double_parens)]
 pub(crate) fn read_u4(bytes: &[u8], ix: &mut usize) -> Result<u32, ParseError> {
     if bytes.len() < *ix + 4 {
         fail!("Unexpected end of stream reading u4 at index {}", *ix);
@@ -53,6 +55,7 @@ pub(crate) fn read_u4(bytes: &[u8], ix: &mut usize) -> Result<u32, ParseError> {
     Ok(result)
 }
 
+#[allow(clippy::double_parens)]
 pub(crate) fn read_u8(bytes: &[u8], ix: &mut usize) -> Result<u64, ParseError> {
     if bytes.len() < *ix + 8 {
         fail!("Unexpected end of stream reading u8 at index {}", *ix);

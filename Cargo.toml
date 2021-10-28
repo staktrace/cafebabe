@@ -11,7 +11,7 @@ repository = "https://github.com/staktrace/cafebabe"
 readme = "README.md"
 keywords = ["parse", "java", "class", "jvm", "classfile"]
 categories = ["parsing"]
-exclude = ["examples/**", "tests/**"]
+exclude = [".gitignore", ".github/**", "examples/**", "tests/**"]
 
 [badges]
 maintenance = { status = "passively-maintained" }

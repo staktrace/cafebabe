@@ -11,6 +11,7 @@ pub mod error;
 pub mod attributes;
 pub mod bytecode;
 pub mod constant_pool;
+pub mod descriptor;
 pub mod names;
 
 use std::borrow::Cow;
@@ -23,6 +24,7 @@ use crate::constant_pool::{
     read_constant_pool, read_cp_classinfo, read_cp_classinfo_opt, read_cp_utf8, ConstantPoolEntry,
     ConstantPoolIter,
 };
+use crate::descriptor::{FieldType, MethodDescriptor, ReturnDescriptor};
 pub use crate::error::ParseError;
 use crate::names::{is_field_descriptor, is_method_descriptor, is_unqualified_name};
 
@@ -135,7 +137,7 @@ bitflags! {
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
     pub name: Cow<'a, str>,
-    pub descriptor: Cow<'a, str>,
+    pub descriptor: FieldType,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -147,7 +149,7 @@ fn read_fields<'a>(
 ) -> Result<Vec<FieldInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut fields = Vec::with_capacity(count.into());
-    let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
+    let mut unique_ids: HashSet<(Cow<'a, str>, FieldType)> = HashSet::new();
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name =
@@ -160,6 +162,10 @@ fn read_fields<'a>(
         if !is_field_descriptor(&descriptor) {
             fail!("Invalid descriptor for class field {}", i);
         }
+
+        let mut descriptor = descriptor.chars();
+        let descriptor = FieldType::parse(&mut descriptor)?;
+
         let unique_id = (name.clone(), descriptor.clone());
         if !unique_ids.insert(unique_id) {
             fail!(
@@ -200,7 +206,7 @@ bitflags! {
 pub struct MethodInfo<'a> {
     pub access_flags: MethodAccessFlags,
     pub name: Cow<'a, str>,
-    pub descriptor: Cow<'a, str>,
+    pub descriptor: MethodDescriptor,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -214,7 +220,7 @@ fn read_methods<'a>(
 ) -> Result<Vec<MethodInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
-    let mut unique_ids: HashSet<(Cow<'a, str>, Cow<'a, str>)> = HashSet::new();
+    let mut unique_ids: HashSet<(Cow<'a, str>, MethodDescriptor)> = HashSet::new();
     for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name =
@@ -228,14 +234,17 @@ fn read_methods<'a>(
         if !is_method_descriptor(&descriptor) {
             fail!("Invalid descriptor for class method {}", i);
         }
-        if allow_init && name == "<init>" && !descriptor.ends_with('V') {
+        let mut descriptor = descriptor.chars();
+        let descriptor = MethodDescriptor::parse(&mut descriptor)?;
+
+        if allow_init && name == "<init>" && descriptor.result != ReturnDescriptor::Void {
             fail!("Non-void method descriptor for init method {}", i);
         }
         if name == "<clinit>" {
-            if !descriptor.ends_with('V') {
+            if descriptor.result != ReturnDescriptor::Void {
                 fail!("Non-void method descriptor for clinit method {}", i);
             }
-            if major_version >= 51 && !descriptor.starts_with("()") {
+            if major_version >= 51 && !descriptor.parameters.is_empty() {
                 fail!("Arguments found in descriptor for clinit method {}", i);
             }
         }

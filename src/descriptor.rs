@@ -1,16 +1,20 @@
-use std::{borrow::Cow, str::Chars};
+use std::{
+    borrow::Cow,
+    fmt::{self, Write},
+    str::Chars,
+};
 
 use crate::ParseError;
 
 /// MethodDescriptor as described in section 4.3.3 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
-#[derive(Debug, PartialEq, Eq)]
-pub struct MethodDescriptor<'a> {
-    pub parameters: Vec<FieldType<'a>>,
-    pub result: ReturnDescriptor<'a>,
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct MethodDescriptor {
+    pub parameters: Vec<FieldType>,
+    pub result: ReturnDescriptor,
 }
 
-impl<'a> MethodDescriptor<'a> {
-    fn parse(chars: &mut Chars<'a>) -> Result<Self, ParseError> {
+impl MethodDescriptor {
+    pub(crate) fn parse(chars: &mut Chars) -> Result<Self, ParseError> {
         match chars.next() {
             Some('(') => (),
             Some(c) => fail!("Invalid start of method descriptor {}", c),
@@ -37,16 +41,28 @@ impl<'a> MethodDescriptor<'a> {
     }
 }
 
-/// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
-#[derive(Debug, PartialEq, Eq)]
-pub enum FieldType<'a> {
-    Base(BaseType),
-    Object(Cow<'a, str>),
-    Array(Box<FieldType<'a>>),
+impl fmt::Display for MethodDescriptor {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.write_char('(')?;
+
+        for param in &self.parameters {
+            write!(f, "{}", param)?;
+        }
+
+        write!(f, "){}", self.result)
+    }
 }
 
-impl<'a> FieldType<'a> {
-    fn parse(chars: &mut Chars<'a>) -> Result<Self, ParseError> {
+/// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum FieldType {
+    Base(BaseType),
+    Object(Cow<'static, str>),
+    Array(Box<FieldType>),
+}
+
+impl FieldType {
+    pub(crate) fn parse(chars: &mut Chars) -> Result<Self, ParseError> {
         let field = match chars.next() {
             Some('L') => Self::Object(parse_object(chars)?),
             Some('[') => Self::Array(Box::new(FieldType::parse(chars)?)),
@@ -58,8 +74,18 @@ impl<'a> FieldType<'a> {
     }
 }
 
+impl fmt::Display for FieldType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Self::Base(base) => write!(f, "{}", base),
+            Self::Object(obj) => write!(f, "L{};", obj),
+            Self::Array(arr) => write!(f, "[{}", arr),
+        }
+    }
+}
+
 /// BaseType as described in Table 4.3-A. of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum BaseType {
     /// B, byte, signed byte
     BYTE,
@@ -97,15 +123,32 @@ impl BaseType {
     }
 }
 
+impl fmt::Display for BaseType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let c = match self {
+            Self::BYTE => 'B',
+            Self::CHAR => 'C',
+            Self::DOUBLE => 'D',
+            Self::FLOAT => 'F',
+            Self::INT => 'I',
+            Self::LONG => 'J',
+            Self::SHORT => 'S',
+            Self::BOOLEAN => 'Z',
+        };
+
+        f.write_char(c)
+    }
+}
+
 /// ReturnDescriptor
-#[derive(Debug, PartialEq, Eq)]
-pub enum ReturnDescriptor<'a> {
-    Return(FieldType<'a>),
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum ReturnDescriptor {
+    Return(FieldType),
     Void,
 }
 
-impl<'a> ReturnDescriptor<'a> {
-    fn parse(chars: &mut Chars<'a>) -> Result<Self, ParseError> {
+impl ReturnDescriptor {
+    fn parse(chars: &mut Chars) -> Result<Self, ParseError> {
         let result = match chars.as_str().chars().next() {
             Some('V') => Self::Void,
             Some(_) => Self::Return(FieldType::parse(chars)?),
@@ -116,14 +159,17 @@ impl<'a> ReturnDescriptor<'a> {
     }
 }
 
-/// Parses the object less the beginning L, e.g. this expects `java/lang/Object;`
-fn parse_object<'a>(chars: &mut Chars<'a>) -> Result<Cow<'a, str>, ParseError> {
-    // match chars.next() {
-    //     Some('L') => (),
-    //     Some(ch) => fail!("Invalid object descriptor, expected L {}", ch),
-    //     None => fail!("Invalid object descriptor, expected L"),
-    // };
+impl fmt::Display for ReturnDescriptor {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Self::Void => f.write_char('V'),
+            Self::Return(field) => write!(f, "{}", field),
+        }
+    }
+}
 
+/// Parses the object less the beginning L, e.g. this expects `java/lang/Object;`
+fn parse_object(chars: &mut Chars) -> Result<Cow<'static, str>, ParseError> {
     if !chars.clone().any(|ch| ch == ';') {
         fail!("Invalid object descriptor, expected ;");
     }
@@ -310,5 +356,19 @@ mod tests {
             result,
             ReturnDescriptor::Return(FieldType::Array(Box::new(FieldType::Base(BaseType::LONG))))
         );
+    }
+
+    #[test]
+    fn test_display() {
+        let descriptor = MethodDescriptor {
+            parameters: vec![
+                FieldType::Base(BaseType::LONG),
+                FieldType::Object(Cow::Borrowed("java/lang/Object")),
+                FieldType::Array(Box::new(FieldType::Base(BaseType::BYTE))),
+            ],
+            result: ReturnDescriptor::Void,
+        };
+
+        assert_eq!(descriptor.to_string(), "(JLjava/lang/Object;[B)V");
     }
 }

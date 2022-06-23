@@ -8,7 +8,7 @@ use std::{
 
 use crate::ParseError;
 
-/// MethodDescriptor as described in section 4.3.3 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
+/// MethodDescriptor as described in section 4.3.3 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.3)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct MethodDescriptor<'a> {
     pub parameters: Vec<FieldType<'a>>,
@@ -58,7 +58,7 @@ impl<'a> fmt::Display for MethodDescriptor<'a> {
     }
 }
 
-/// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
+/// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum FieldType<'a> {
     Base(BaseType),
@@ -97,38 +97,38 @@ impl<'a> fmt::Display for FieldType<'a> {
     }
 }
 
-/// BaseType as described in Table 4.3-A. of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
+/// BaseType as described in Table 4.3-A. of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2-200)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum BaseType {
     /// B, byte, signed byte
-    BYTE,
+    Byte,
     /// C, char, Unicode character code point in the Basic Multilingual Plane, encoded with UTF-16
-    CHAR,
+    Char,
     /// D, double, double-precision floating-point value
-    DOUBLE,
+    Double,
     /// F, float, single-precision floating-point value
-    FLOAT,
+    Float,
     /// I, int, integer
-    INT,
+    Int,
     /// J, long, long integer
-    LONG,
+    Long,
     /// S, short, signed short
-    SHORT,
+    Short,
     /// Z, boolean, true or false
-    BOOLEAN,
+    Boolean,
 }
 
 impl BaseType {
     fn parse(ch: char) -> Result<Self, ParseError> {
         let this = match ch {
-            'B' => Self::BYTE,
-            'C' => Self::CHAR,
-            'D' => Self::DOUBLE,
-            'F' => Self::FLOAT,
-            'I' => Self::INT,
-            'J' => Self::LONG,
-            'S' => Self::SHORT,
-            'Z' => Self::BOOLEAN,
+            'B' => Self::Byte,
+            'C' => Self::Char,
+            'D' => Self::Double,
+            'F' => Self::Float,
+            'I' => Self::Int,
+            'J' => Self::Long,
+            'S' => Self::Short,
+            'Z' => Self::Boolean,
             _ => fail!("Invalid base type {}", ch),
         };
 
@@ -139,14 +139,14 @@ impl BaseType {
 impl fmt::Display for BaseType {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let c = match self {
-            Self::BYTE => 'B',
-            Self::CHAR => 'C',
-            Self::DOUBLE => 'D',
-            Self::FLOAT => 'F',
-            Self::INT => 'I',
-            Self::LONG => 'J',
-            Self::SHORT => 'S',
-            Self::BOOLEAN => 'Z',
+            Self::Byte => 'B',
+            Self::Char => 'C',
+            Self::Double => 'D',
+            Self::Float => 'F',
+            Self::Int => 'I',
+            Self::Long => 'J',
+            Self::Short => 'S',
+            Self::Boolean => 'Z',
         };
 
         f.write_char(c)
@@ -243,7 +243,7 @@ mod tests {
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::LONG));
+        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Long));
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
     }
@@ -259,7 +259,7 @@ mod tests {
         assert!(parameters.next().is_none());
         assert_eq!(
             result,
-            ReturnDescriptor::Return(FieldType::Base(BaseType::LONG))
+            ReturnDescriptor::Return(FieldType::Base(BaseType::Long))
         );
     }
 
@@ -271,19 +271,19 @@ mod tests {
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::BYTE));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::CHAR));
+        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Byte));
+        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Char));
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Base(BaseType::DOUBLE)
+            FieldType::Base(BaseType::Double)
         );
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::FLOAT));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::INT));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::LONG));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::SHORT));
+        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Float));
+        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Int));
+        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Long));
+        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Short));
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Base(BaseType::BOOLEAN)
+            FieldType::Base(BaseType::Boolean)
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -366,7 +366,7 @@ mod tests {
 
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Array(Box::new(FieldType::Base(BaseType::LONG)))
+            FieldType::Array(Box::new(FieldType::Base(BaseType::Long)))
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(
             parameters.next().unwrap(),
             FieldType::Array(Box::new(FieldType::Array(Box::new(FieldType::Base(
-                BaseType::LONG
+                BaseType::Long
             )))))
         );
         assert!(parameters.next().is_none());
@@ -401,7 +401,7 @@ mod tests {
         assert!(parameters.next().is_none());
         assert_eq!(
             result,
-            ReturnDescriptor::Return(FieldType::Array(Box::new(FieldType::Base(BaseType::LONG))))
+            ReturnDescriptor::Return(FieldType::Array(Box::new(FieldType::Base(BaseType::Long))))
         );
     }
 
@@ -409,9 +409,9 @@ mod tests {
     fn test_display() {
         let descriptor = MethodDescriptor {
             parameters: vec![
-                FieldType::Base(BaseType::LONG),
+                FieldType::Base(BaseType::Long),
                 FieldType::Object(Cow::Borrowed("java/lang/Object")),
-                FieldType::Array(Box::new(FieldType::Base(BaseType::BYTE))),
+                FieldType::Array(Box::new(FieldType::Base(BaseType::Byte))),
             ],
             result: ReturnDescriptor::Void,
         };

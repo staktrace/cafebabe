@@ -26,7 +26,7 @@ use crate::constant_pool::{
 };
 use crate::descriptor::{FieldType, MethodDescriptor, ReturnDescriptor};
 pub use crate::error::ParseError;
-use crate::names::{is_field_descriptor, is_method_descriptor, is_unqualified_name};
+use crate::names::is_unqualified_name;
 
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     if bytes.len() < *ix + 1 {
@@ -159,10 +159,6 @@ fn read_fields<'a>(
         }
         let descriptor = read_cp_utf8(bytes, ix, pool)
             .map_err(|e| err!(e, "descriptor of class field {}", i))?;
-        if !is_field_descriptor(&descriptor) {
-            fail!("Invalid descriptor for class field {}", i);
-        }
-
         let descriptor = FieldType::parse(&descriptor)?;
 
         let unique_id = (name.clone(), descriptor.clone());
@@ -230,9 +226,6 @@ fn read_methods<'a>(
         }
         let descriptor = read_cp_utf8(bytes, ix, pool)
             .map_err(|e| err!(e, "descriptor of class method {}", i))?;
-        if !is_method_descriptor(&descriptor) {
-            fail!("Invalid descriptor for class method {}", i);
-        }
         let descriptor = MethodDescriptor::parse(&descriptor)?;
 
         if allow_init && name == "<init>" && descriptor.result != ReturnDescriptor::Void {

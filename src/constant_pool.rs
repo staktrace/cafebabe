@@ -902,7 +902,6 @@ pub(crate) fn read_cp_invokedynamic<'a>(
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Dynamic<'a> {
     attr_index: u16,

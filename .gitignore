@@ -1,2 +1,4 @@
 /target
 Cargo.lock
+
+tests/parse/tgz/openjdk16.0.1-modules

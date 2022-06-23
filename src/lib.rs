@@ -137,7 +137,7 @@ bitflags! {
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
     pub name: Cow<'a, str>,
-    pub descriptor: FieldType,
+    pub descriptor: FieldType<'a>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -149,7 +149,7 @@ fn read_fields<'a>(
 ) -> Result<Vec<FieldInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut fields = Vec::with_capacity(count.into());
-    let mut unique_ids: HashSet<(Cow<'a, str>, FieldType)> = HashSet::new();
+    let mut unique_ids: HashSet<(Cow<'a, str>, FieldType<'a>)> = HashSet::new();
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name =
@@ -163,8 +163,7 @@ fn read_fields<'a>(
             fail!("Invalid descriptor for class field {}", i);
         }
 
-        let mut descriptor = descriptor.chars();
-        let descriptor = FieldType::parse(&mut descriptor)?;
+        let descriptor = FieldType::parse(&descriptor)?;
 
         let unique_id = (name.clone(), descriptor.clone());
         if !unique_ids.insert(unique_id) {
@@ -206,7 +205,7 @@ bitflags! {
 pub struct MethodInfo<'a> {
     pub access_flags: MethodAccessFlags,
     pub name: Cow<'a, str>,
-    pub descriptor: MethodDescriptor,
+    pub descriptor: MethodDescriptor<'a>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -220,7 +219,7 @@ fn read_methods<'a>(
 ) -> Result<Vec<MethodInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut methods = Vec::with_capacity(count.into());
-    let mut unique_ids: HashSet<(Cow<'a, str>, MethodDescriptor)> = HashSet::new();
+    let mut unique_ids: HashSet<(Cow<'a, str>, MethodDescriptor<'a>)> = HashSet::new();
     for i in 0..count {
         let access_flags = MethodAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name =
@@ -234,8 +233,7 @@ fn read_methods<'a>(
         if !is_method_descriptor(&descriptor) {
             fail!("Invalid descriptor for class method {}", i);
         }
-        let mut descriptor = descriptor.chars();
-        let descriptor = MethodDescriptor::parse(&mut descriptor)?;
+        let descriptor = MethodDescriptor::parse(&descriptor)?;
 
         if allow_init && name == "<init>" && descriptor.result != ReturnDescriptor::Void {
             fail!("Non-void method descriptor for init method {}", i);

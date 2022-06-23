@@ -1,21 +1,24 @@
+#![allow(clippy::ptr_arg)]
+
 use std::{
     borrow::Cow,
     fmt::{self, Write},
-    str::Chars,
+    str::CharIndices,
 };
 
 use crate::ParseError;
 
 /// MethodDescriptor as described in section 4.3.3 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct MethodDescriptor {
-    pub parameters: Vec<FieldType>,
-    pub result: ReturnDescriptor,
+pub struct MethodDescriptor<'a> {
+    pub parameters: Vec<FieldType<'a>>,
+    pub result: ReturnDescriptor<'a>,
 }
 
-impl MethodDescriptor {
-    pub(crate) fn parse(chars: &mut Chars) -> Result<Self, ParseError> {
-        match chars.next() {
+impl<'a> MethodDescriptor<'a> {
+    pub(crate) fn parse(chars: &Cow<'a, str>) -> Result<Self, ParseError> {
+        let mut chars_idx = chars.char_indices();
+        match chars_idx.next().map(|(_, ch)| ch) {
             Some('(') => (),
             Some(c) => fail!("Invalid start of method descriptor {}", c),
             None => fail!("Invalid start of method descriptor, missing ("),
@@ -24,24 +27,26 @@ impl MethodDescriptor {
         let mut parameters: Vec<FieldType> = Vec::new();
 
         'done: loop {
-            let field = match chars.as_str().chars().next() {
-                Some(')') => break 'done,
-                Some(_) => FieldType::parse(chars)?,
+            // preserve the next item for use in the FieldType parser
+            let field = match chars_idx.as_str().chars().next() {
+                Some(')') => {
+                    chars_idx.next(); // consume the final ')'
+                    break 'done;
+                }
+                Some(_) => FieldType::parse_from_chars_idx(chars, &mut chars_idx)?,
                 None => fail!("Invalid method descriptor, missing end )"),
             };
 
             parameters.push(field);
         }
 
-        // consume the final ')'
-        chars.next();
-        let result = ReturnDescriptor::parse(chars)?;
+        let result = ReturnDescriptor::parse(chars, &mut chars_idx)?;
 
         Ok(MethodDescriptor { parameters, result })
     }
 }
 
-impl fmt::Display for MethodDescriptor {
+impl<'a> fmt::Display for MethodDescriptor<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.write_char('(')?;
 
@@ -55,17 +60,25 @@ impl fmt::Display for MethodDescriptor {
 
 /// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/jvms18.pdf)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub enum FieldType {
+pub enum FieldType<'a> {
     Base(BaseType),
-    Object(Cow<'static, str>),
-    Array(Box<FieldType>),
+    Object(Cow<'a, str>),
+    Array(Box<FieldType<'a>>),
 }
 
-impl FieldType {
-    pub(crate) fn parse(chars: &mut Chars) -> Result<Self, ParseError> {
-        let field = match chars.next() {
-            Some('L') => Self::Object(parse_object(chars)?),
-            Some('[') => Self::Array(Box::new(FieldType::parse(chars)?)),
+impl<'a> FieldType<'a> {
+    pub(crate) fn parse(chars: &Cow<'a, str>) -> Result<Self, ParseError> {
+        let mut chars_idx = chars.char_indices();
+        Self::parse_from_chars_idx(chars, &mut chars_idx)
+    }
+
+    fn parse_from_chars_idx(
+        chars: &Cow<'a, str>,
+        chars_idx: &mut CharIndices,
+    ) -> Result<Self, ParseError> {
+        let field = match chars_idx.next().map(|(_, ch)| ch) {
+            Some('L') => Self::Object(parse_object(chars, chars_idx)?),
+            Some('[') => Self::Array(Box::new(FieldType::parse_from_chars_idx(chars, chars_idx)?)),
             Some(ch) => Self::Base(BaseType::parse(ch)?),
             None => fail!("Invalid FieldType"),
         };
@@ -74,7 +87,7 @@ impl FieldType {
     }
 }
 
-impl fmt::Display for FieldType {
+impl<'a> fmt::Display for FieldType<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             Self::Base(base) => write!(f, "{}", base),
@@ -142,16 +155,20 @@ impl fmt::Display for BaseType {
 
 /// ReturnDescriptor
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub enum ReturnDescriptor {
-    Return(FieldType),
+pub enum ReturnDescriptor<'a> {
+    Return(FieldType<'a>),
     Void,
 }
 
-impl ReturnDescriptor {
-    fn parse(chars: &mut Chars) -> Result<Self, ParseError> {
-        let result = match chars.as_str().chars().next() {
-            Some('V') => Self::Void,
-            Some(_) => Self::Return(FieldType::parse(chars)?),
+impl<'a> ReturnDescriptor<'a> {
+    fn parse(chars: &Cow<'a, str>, chars_idx: &mut CharIndices) -> Result<Self, ParseError> {
+        // preserve the next item for use in the FieldType parser
+        let result = match chars_idx.as_str().chars().next() {
+            Some('V') => {
+                chars_idx.next(); // for correctness
+                Self::Void
+            }
+            Some(_) => Self::Return(FieldType::parse_from_chars_idx(chars, chars_idx)?),
             None => fail!("Invalid return descriptor, missing value"),
         };
 
@@ -159,7 +176,7 @@ impl ReturnDescriptor {
     }
 }
 
-impl fmt::Display for ReturnDescriptor {
+impl<'a> fmt::Display for ReturnDescriptor<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             Self::Void => f.write_char('V'),
@@ -169,13 +186,37 @@ impl fmt::Display for ReturnDescriptor {
 }
 
 /// Parses the object less the beginning L, e.g. this expects `java/lang/Object;`
-fn parse_object(chars: &mut Chars) -> Result<Cow<'static, str>, ParseError> {
-    if !chars.clone().any(|ch| ch == ';') {
-        fail!("Invalid object descriptor, expected ;");
-    }
+fn parse_object<'a>(
+    chars: &Cow<'a, str>,
+    chars_idx: &mut CharIndices,
+) -> Result<Cow<'a, str>, ParseError> {
+    let start_idx = chars_idx
+        .next()
+        .map(|ch_idx| ch_idx.0)
+        .ok_or_else(|| err!("Invalid object descriptor, expected ;"))?;
 
-    let object: String = chars.by_ref().take_while(|ch| *ch != ';').collect();
-    Ok(Cow::Owned(object))
+    let end_idx = chars_idx
+        .find_map(|(idx, ch)| if ch == ';' { Some(idx) } else { None })
+        .ok_or_else(|| err!("Invalid object descriptor, expected ;"))?;
+
+    // Because a Cow can be either Borrowed or Owned, we need to create an Owned String in the case that it's not a reference.
+    // This should be rare, if ever.
+    let object = match *chars {
+        Cow::Borrowed(chars) => {
+            let object = chars
+                .get(start_idx..end_idx)
+                .ok_or_else(|| err!("Invalid object descriptor, out of bounds"))?;
+            Cow::Borrowed(object)
+        }
+        Cow::Owned(ref chars) => {
+            let object = chars
+                .get(start_idx..end_idx)
+                .ok_or_else(|| err!("Invalid object descriptor, out of bounds"))?;
+            Cow::Owned(object.to_string())
+        }
+    };
+
+    Ok(object)
 }
 
 #[cfg(test)]
@@ -184,10 +225,9 @@ mod tests {
 
     #[test]
     fn test_void_void() {
-        let string = "()V";
-        let mut chars = string.chars();
+        let chars = Cow::from("()V");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -197,10 +237,9 @@ mod tests {
 
     #[test]
     fn test_single_param() {
-        let string = "(J)V";
-        let mut chars = string.chars();
+        let chars = Cow::from("(J)V");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -211,10 +250,9 @@ mod tests {
 
     #[test]
     fn test_basetype_return() {
-        let string = "()J";
-        let mut chars = string.chars();
+        let chars = Cow::from("()J");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -227,10 +265,9 @@ mod tests {
 
     #[test]
     fn test_all_basetype_params() {
-        let string = "(BCDFIJSZ)V";
-        let mut chars = string.chars();
+        let chars = Cow::from("(BCDFIJSZ)V");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -254,10 +291,25 @@ mod tests {
 
     #[test]
     fn test_object_param() {
-        let string = "(Ljava/lang/Object;)V";
-        let mut chars = string.chars();
+        let chars = Cow::from("(Ljava/lang/Object;)V");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
+        let mut parameters = descriptor.parameters.into_iter();
+        let result = descriptor.result;
+
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Object(Cow::Borrowed("java/lang/Object"))
+        );
+        assert!(parameters.next().is_none());
+        assert_eq!(result, ReturnDescriptor::Void);
+    }
+
+    #[test]
+    fn test_owned_cow() {
+        let chars = Cow::from("(Ljava/lang/Object;)V".to_string());
+
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -271,10 +323,9 @@ mod tests {
 
     #[test]
     fn test_multi_object_param() {
-        let string = "(Ljava/lang/Object;Ljava/lang/String;)V";
-        let mut chars = string.chars();
+        let chars = Cow::from("(Ljava/lang/Object;Ljava/lang/String;)V");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -292,10 +343,9 @@ mod tests {
 
     #[test]
     fn test_object_return() {
-        let string = "()Ljava/lang/Object;";
-        let mut chars = string.chars();
+        let chars = Cow::from("()Ljava/lang/Object;");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -308,10 +358,9 @@ mod tests {
 
     #[test]
     fn test_array_basetype_param() {
-        let string = "([J)V";
-        let mut chars = string.chars();
+        let chars = Cow::from("([J)V");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -325,10 +374,9 @@ mod tests {
 
     #[test]
     fn test_multi_array_param() {
-        let string = "([[J)V";
-        let mut chars = string.chars();
+        let chars = Cow::from("([[J)V");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
@@ -344,10 +392,9 @@ mod tests {
 
     #[test]
     fn test_array_return() {
-        let string = "()[J";
-        let mut chars = string.chars();
+        let chars = Cow::from("()[J");
 
-        let descriptor = MethodDescriptor::parse(&mut chars).unwrap();
+        let descriptor = MethodDescriptor::parse(&chars).unwrap();
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 

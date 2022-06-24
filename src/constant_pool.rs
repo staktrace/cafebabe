@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::names::{
     is_array_descriptor, is_binary_name, is_field_descriptor, is_method_descriptor, is_module_name,
-    is_unqualified_name,
+    is_unqualified_method_name, is_unqualified_name,
 };
 use crate::{read_u1, read_u2, read_u4, read_u8, ParseError};
 
@@ -324,7 +324,8 @@ impl<'a> ConstantPoolEntry<'a> {
     }
 
     fn validate_unqualified_name(&self) -> Result<(), ParseError> {
-        if is_unqualified_name(self.str()?, true, false) {
+        let s = self.str()?;
+        if is_unqualified_name(s) || is_unqualified_method_name(s, true, false) {
             Ok(())
         } else {
             fail!("Invalid unqualified name")

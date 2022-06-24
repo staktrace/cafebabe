@@ -1,6 +1,7 @@
 #![allow(clippy::ptr_arg)]
 
 use std::{
+    array,
     borrow::Cow,
     fmt::{self, Write},
     str::CharIndices,
@@ -33,7 +34,7 @@ impl<'a> MethodDescriptor<'a> {
                     chars_idx.next(); // consume the final ')'
                     break 'done;
                 }
-                Some(_) => FieldType::parse_from_chars_idx(chars, &mut chars_idx, 0)?,
+                Some(_) => FieldType::parse_from_chars_idx(chars, &mut chars_idx)?,
                 None => fail!("Invalid method descriptor, missing end )"),
             };
 
@@ -63,38 +64,56 @@ impl<'a> fmt::Display for MethodDescriptor<'a> {
 pub enum FieldType<'a> {
     Base(BaseType),
     Object(Cow<'a, str>),
-    Array(Box<FieldType<'a>>),
+    Array {
+        dimensions: usize,
+        ty: Box<FieldType<'a>>,
+    },
 }
 
 impl<'a> FieldType<'a> {
     pub(crate) fn parse(chars: &Cow<'a, str>) -> Result<Self, ParseError> {
         let mut chars_idx = chars.char_indices();
-        Self::parse_from_chars_idx(chars, &mut chars_idx, 0)
+        Self::parse_from_chars_idx(chars, &mut chars_idx)
     }
 
     fn parse_from_chars_idx(
         chars: &Cow<'a, str>,
         chars_idx: &mut CharIndices,
-        depth: usize,
     ) -> Result<Self, ParseError> {
-        // A field descriptor representing an array type is valid only if it represents a type with 255 or fewer dimensions.
-        //  see: https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2
-        if depth > 255 {
-            fail!("Array exceeds 255 dimensions");
+        let mut field = None;
+        let mut array_depth = 0;
+
+        while let Some(ch) = chars_idx.next().map(|(_, ch)| ch) {
+            match ch {
+                'L' => {
+                    field = Some(Self::Object(parse_object(chars, chars_idx)?));
+                    break;
+                }
+                '[' => {
+                    array_depth += 1;
+
+                    // A field descriptor representing an array type is valid only if it represents a type with 255 or fewer dimensions.
+                    //  see: https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2
+                    if array_depth > 255 {
+                        fail!("Array exceeds 255 dimensions");
+                    }
+                }
+                ch => {
+                    field = Some(Self::Base(BaseType::parse(ch)?));
+                    break;
+                }
+            };
         }
 
-        let field = match chars_idx.next().map(|(_, ch)| ch) {
-            Some('L') => Self::Object(parse_object(chars, chars_idx)?),
-            Some('[') => Self::Array(Box::new(FieldType::parse_from_chars_idx(
-                chars,
-                chars_idx,
-                depth + 1,
-            )?)),
-            Some(ch) => Self::Base(BaseType::parse(ch)?),
-            None => fail!("Invalid FieldType"),
-        };
-
-        Ok(field)
+        let field = field.ok_or_else(|| err!("FieldType not specified"))?;
+        if array_depth > 0 {
+            Ok(FieldType::Array {
+                dimensions: array_depth,
+                ty: Box::new(field),
+            })
+        } else {
+            Ok(field)
+        }
     }
 }
 
@@ -103,7 +122,7 @@ impl<'a> fmt::Display for FieldType<'a> {
         match self {
             Self::Base(base) => write!(f, "{}", base),
             Self::Object(obj) => write!(f, "L{};", obj),
-            Self::Array(arr) => write!(f, "[{}", arr),
+            Self::Array { dimensions, ty } => write!(f, "{}{}", "[".repeat(*dimensions), ty),
         }
     }
 }
@@ -179,7 +198,7 @@ impl<'a> ReturnDescriptor<'a> {
                 chars_idx.next(); // for correctness
                 Self::Void
             }
-            Some(_) => Self::Return(FieldType::parse_from_chars_idx(chars, chars_idx, 0)?),
+            Some(_) => Self::Return(FieldType::parse_from_chars_idx(chars, chars_idx)?),
             None => fail!("Invalid return descriptor, missing value"),
         };
 
@@ -377,7 +396,10 @@ mod tests {
 
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Array(Box::new(FieldType::Base(BaseType::Long)))
+            FieldType::Array {
+                dimensions: 1,
+                ty: Box::new(FieldType::Base(BaseType::Long))
+            }
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -393,9 +415,10 @@ mod tests {
 
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Array(Box::new(FieldType::Array(Box::new(FieldType::Base(
-                BaseType::Long
-            )))))
+            FieldType::Array {
+                dimensions: 2,
+                ty: Box::new(FieldType::Base(BaseType::Long))
+            }
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -412,7 +435,10 @@ mod tests {
         assert!(parameters.next().is_none());
         assert_eq!(
             result,
-            ReturnDescriptor::Return(FieldType::Array(Box::new(FieldType::Base(BaseType::Long))))
+            ReturnDescriptor::Return(FieldType::Array {
+                dimensions: 1,
+                ty: Box::new(FieldType::Base(BaseType::Long))
+            })
         );
     }
 
@@ -422,12 +448,15 @@ mod tests {
             parameters: vec![
                 FieldType::Base(BaseType::Long),
                 FieldType::Object(Cow::Borrowed("java/lang/Object")),
-                FieldType::Array(Box::new(FieldType::Base(BaseType::Byte))),
+                FieldType::Array {
+                    dimensions: 2,
+                    ty: Box::new(FieldType::Base(BaseType::Byte)),
+                },
             ],
             result: ReturnDescriptor::Void,
         };
 
-        assert_eq!(descriptor.to_string(), "(JLjava/lang/Object;[B)V");
+        assert_eq!(descriptor.to_string(), "(JLjava/lang/Object;[[B)V");
     }
 
     #[test]

@@ -33,7 +33,7 @@ impl<'a> MethodDescriptor<'a> {
                     chars_idx.next(); // consume the final ')'
                     break 'done;
                 }
-                Some(_) => FieldType::parse_from_chars_idx(chars, &mut chars_idx)?,
+                Some(_) => FieldType::parse_from_chars_idx(chars, &mut chars_idx, 0)?,
                 None => fail!("Invalid method descriptor, missing end )"),
             };
 
@@ -69,16 +69,27 @@ pub enum FieldType<'a> {
 impl<'a> FieldType<'a> {
     pub(crate) fn parse(chars: &Cow<'a, str>) -> Result<Self, ParseError> {
         let mut chars_idx = chars.char_indices();
-        Self::parse_from_chars_idx(chars, &mut chars_idx)
+        Self::parse_from_chars_idx(chars, &mut chars_idx, 0)
     }
 
     fn parse_from_chars_idx(
         chars: &Cow<'a, str>,
         chars_idx: &mut CharIndices,
+        depth: usize,
     ) -> Result<Self, ParseError> {
+        // A field descriptor representing an array type is valid only if it represents a type with 255 or fewer dimensions.
+        //  see: https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2
+        if depth > 255 {
+            fail!("Array exceeds 255 dimensions");
+        }
+
         let field = match chars_idx.next().map(|(_, ch)| ch) {
             Some('L') => Self::Object(parse_object(chars, chars_idx)?),
-            Some('[') => Self::Array(Box::new(FieldType::parse_from_chars_idx(chars, chars_idx)?)),
+            Some('[') => Self::Array(Box::new(FieldType::parse_from_chars_idx(
+                chars,
+                chars_idx,
+                depth + 1,
+            )?)),
             Some(ch) => Self::Base(BaseType::parse(ch)?),
             None => fail!("Invalid FieldType"),
         };
@@ -168,7 +179,7 @@ impl<'a> ReturnDescriptor<'a> {
                 chars_idx.next(); // for correctness
                 Self::Void
             }
-            Some(_) => Self::Return(FieldType::parse_from_chars_idx(chars, chars_idx)?),
+            Some(_) => Self::Return(FieldType::parse_from_chars_idx(chars, chars_idx, 0)?),
             None => fail!("Invalid return descriptor, missing value"),
         };
 
@@ -417,5 +428,14 @@ mod tests {
         };
 
         assert_eq!(descriptor.to_string(), "(JLjava/lang/Object;[B)V");
+    }
+
+    #[test]
+    fn test_max_array_depth() {
+        let chars_ok = Cow::from(format!("({}J)V", "[".repeat(255)));
+        let chars_bad = Cow::from(format!("({}J)V", "[".repeat(256)));
+
+        assert!(MethodDescriptor::parse(&chars_ok).is_ok());
+        assert!(MethodDescriptor::parse(&chars_bad).is_err());
     }
 }

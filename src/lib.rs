@@ -26,7 +26,7 @@ use crate::constant_pool::{
 };
 use crate::descriptor::{FieldType, MethodDescriptor, ReturnDescriptor};
 pub use crate::error::ParseError;
-use crate::names::is_unqualified_name;
+use crate::names::{is_unqualified_method_name, is_unqualified_name};
 
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     if bytes.len() < *ix + 1 {
@@ -154,7 +154,7 @@ fn read_fields<'a>(
         let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name =
             read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class field {}", i))?;
-        if !is_unqualified_name(&name, false, false) {
+        if !is_unqualified_name(&name) {
             fail!("Invalid unqualified name for class field {}", i);
         }
         let descriptor = read_cp_utf8(bytes, ix, pool)
@@ -221,7 +221,7 @@ fn read_methods<'a>(
         let name =
             read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of class method {}", i))?;
         let allow_init = !in_interface;
-        if !is_unqualified_name(&name, allow_init, true) {
+        if !is_unqualified_method_name(&name, allow_init, true) {
             fail!("Invalid unqualified name for class method {}", i);
         }
         let descriptor = read_cp_utf8(bytes, ix, pool)

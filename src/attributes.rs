@@ -597,7 +597,7 @@ fn read_localvariable_data<'a>(
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name for variable {}", i))?;
-        if !is_unqualified_name(&name, false, false) {
+        if !is_unqualified_name(&name) {
             fail!("Invalid unqualified name for variable {}", i);
         }
         let descriptor =
@@ -628,7 +628,7 @@ fn read_localvariabletype_data<'a>(
         let start_pc = read_u2(bytes, ix)?;
         let length = read_u2(bytes, ix)?;
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name for variable {}", i))?;
-        if !is_unqualified_name(&name, false, false) {
+        if !is_unqualified_name(&name) {
             fail!("Invalid unqualified name for variable {}", i);
         }
         let signature =
@@ -872,7 +872,7 @@ fn read_methodparameters_data<'a>(
     for i in 0..count {
         let name = read_cp_utf8_opt(bytes, ix, pool)
             .map_err(|e| err!(e, "name of method parameter {}", i))?;
-        if name.is_some() && !is_unqualified_name(name.as_ref().unwrap(), false, false) {
+        if name.is_some() && !is_unqualified_name(name.as_ref().unwrap()) {
             fail!("Invalid unqualified name for variable {}", i);
         }
         let access_flags = MethodParameterAccessFlags::from_bits(read_u2(bytes, ix)?)
@@ -1020,7 +1020,7 @@ fn read_record_data<'a>(
     let mut components = Vec::with_capacity(count.into());
     for i in 0..count {
         let name = read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "name of entry {}", i))?;
-        if !is_unqualified_name(&name, false, false) {
+        if !is_unqualified_name(&name) {
             fail!("Invalid unqualified name for entry {}", i);
         }
         let descriptor =

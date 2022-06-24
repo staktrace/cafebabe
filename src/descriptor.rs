@@ -59,15 +59,26 @@ impl<'a> fmt::Display for MethodDescriptor<'a> {
     }
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum Ty<'a> {
+    Base(BaseType),
+    Object(Cow<'a, str>),
+}
+
+impl<'a> fmt::Display for Ty<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Self::Base(base) => write!(f, "{}", base),
+            Self::Object(obj) => write!(f, "L{};", obj),
+        }
+    }
+}
+
 /// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2)
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum FieldType<'a> {
-    Base(BaseType),
-    Object(Cow<'a, str>),
-    Array {
-        dimensions: usize,
-        ty: Box<FieldType<'a>>,
-    },
+    Ty(Ty<'a>),
+    Array { dimensions: usize, ty: Ty<'a> },
 }
 
 impl<'a> FieldType<'a> {
@@ -80,13 +91,13 @@ impl<'a> FieldType<'a> {
         chars: &Cow<'a, str>,
         chars_idx: &mut CharIndices,
     ) -> Result<Self, ParseError> {
-        let mut field = None;
+        let mut field = None::<Ty>;
         let mut array_depth = 0;
 
         while let Some(ch) = chars_idx.next().map(|(_, ch)| ch) {
             match ch {
                 'L' => {
-                    field = Some(Self::Object(parse_object(chars, chars_idx)?));
+                    field = Some(Ty::Object(parse_object(chars, chars_idx)?));
                     break;
                 }
                 '[' => {
@@ -99,7 +110,7 @@ impl<'a> FieldType<'a> {
                     }
                 }
                 ch => {
-                    field = Some(Self::Base(BaseType::parse(ch)?));
+                    field = Some(Ty::Base(BaseType::parse(ch)?));
                     break;
                 }
             };
@@ -109,10 +120,10 @@ impl<'a> FieldType<'a> {
         if array_depth > 0 {
             Ok(FieldType::Array {
                 dimensions: array_depth,
-                ty: Box::new(field),
+                ty: field,
             })
         } else {
-            Ok(field)
+            Ok(FieldType::Ty(field))
         }
     }
 }
@@ -120,8 +131,7 @@ impl<'a> FieldType<'a> {
 impl<'a> fmt::Display for FieldType<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            Self::Base(base) => write!(f, "{}", base),
-            Self::Object(obj) => write!(f, "L{};", obj),
+            Self::Ty(ty) => write!(f, "{}", ty),
             Self::Array { dimensions, ty } => write!(f, "{}{}", "[".repeat(*dimensions), ty),
         }
     }
@@ -273,7 +283,10 @@ mod tests {
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Long));
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Ty(Ty::Base(BaseType::Long))
+        );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
     }
@@ -289,7 +302,7 @@ mod tests {
         assert!(parameters.next().is_none());
         assert_eq!(
             result,
-            ReturnDescriptor::Return(FieldType::Base(BaseType::Long))
+            ReturnDescriptor::Return(FieldType::Ty(Ty::Base(BaseType::Long)))
         );
     }
 
@@ -301,19 +314,37 @@ mod tests {
         let mut parameters = descriptor.parameters.into_iter();
         let result = descriptor.result;
 
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Byte));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Char));
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Base(BaseType::Double)
+            FieldType::Ty(Ty::Base(BaseType::Byte))
         );
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Float));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Int));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Long));
-        assert_eq!(parameters.next().unwrap(), FieldType::Base(BaseType::Short));
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Base(BaseType::Boolean)
+            FieldType::Ty(Ty::Base(BaseType::Char))
+        );
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Ty(Ty::Base(BaseType::Double))
+        );
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Ty(Ty::Base(BaseType::Float))
+        );
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Ty(Ty::Base(BaseType::Int))
+        );
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Ty(Ty::Base(BaseType::Long))
+        );
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Ty(Ty::Base(BaseType::Short))
+        );
+        assert_eq!(
+            parameters.next().unwrap(),
+            FieldType::Ty(Ty::Base(BaseType::Boolean))
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -329,7 +360,7 @@ mod tests {
 
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Object(Cow::Borrowed("java/lang/Object"))
+            FieldType::Ty(Ty::Object(Cow::Borrowed("java/lang/Object")))
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -345,7 +376,7 @@ mod tests {
 
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Object(Cow::Borrowed("java/lang/Object"))
+            FieldType::Ty(Ty::Object(Cow::Borrowed("java/lang/Object")))
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -361,11 +392,11 @@ mod tests {
 
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Object(Cow::Borrowed("java/lang/Object"))
+            FieldType::Ty(Ty::Object(Cow::Borrowed("java/lang/Object")))
         );
         assert_eq!(
             parameters.next().unwrap(),
-            FieldType::Object(Cow::Borrowed("java/lang/String"))
+            FieldType::Ty(Ty::Object(Cow::Borrowed("java/lang/String")))
         );
         assert!(parameters.next().is_none());
         assert_eq!(result, ReturnDescriptor::Void);
@@ -382,7 +413,7 @@ mod tests {
         assert!(parameters.next().is_none());
         assert_eq!(
             result,
-            ReturnDescriptor::Return(FieldType::Object(Cow::Borrowed("java/lang/Object")))
+            ReturnDescriptor::Return(FieldType::Ty(Ty::Object(Cow::Borrowed("java/lang/Object"))))
         );
     }
 
@@ -398,7 +429,7 @@ mod tests {
             parameters.next().unwrap(),
             FieldType::Array {
                 dimensions: 1,
-                ty: Box::new(FieldType::Base(BaseType::Long))
+                ty: Ty::Base(BaseType::Long)
             }
         );
         assert!(parameters.next().is_none());
@@ -417,7 +448,7 @@ mod tests {
             parameters.next().unwrap(),
             FieldType::Array {
                 dimensions: 2,
-                ty: Box::new(FieldType::Base(BaseType::Long))
+                ty: Ty::Base(BaseType::Long)
             }
         );
         assert!(parameters.next().is_none());
@@ -437,7 +468,7 @@ mod tests {
             result,
             ReturnDescriptor::Return(FieldType::Array {
                 dimensions: 1,
-                ty: Box::new(FieldType::Base(BaseType::Long))
+                ty: Ty::Base(BaseType::Long)
             })
         );
     }
@@ -446,11 +477,11 @@ mod tests {
     fn test_display() {
         let descriptor = MethodDescriptor {
             parameters: vec![
-                FieldType::Base(BaseType::Long),
-                FieldType::Object(Cow::Borrowed("java/lang/Object")),
+                FieldType::Ty(Ty::Base(BaseType::Long)),
+                FieldType::Ty(Ty::Object(Cow::Borrowed("java/lang/Object"))),
                 FieldType::Array {
                     dimensions: 2,
-                    ty: Box::new(FieldType::Base(BaseType::Byte)),
+                    ty: Ty::Base(BaseType::Byte),
                 },
             ],
             result: ReturnDescriptor::Void,

@@ -1,7 +1,6 @@
 #![allow(clippy::ptr_arg)]
 
 use std::{
-    array,
     borrow::Cow,
     fmt::{self, Write},
     str::CharIndices,

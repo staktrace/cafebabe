@@ -905,8 +905,8 @@ pub(crate) fn read_cp_invokedynamic<'a>(
 
 #[derive(Debug)]
 pub struct Dynamic<'a> {
-    attr_index: u16,
-    name_and_type: NameAndType<'a>,
+    pub attr_index: u16,
+    pub name_and_type: NameAndType<'a>,
 }
 
 #[derive(Debug)]

@@ -12,7 +12,7 @@ pub mod error;
 pub mod attributes;
 pub mod bytecode;
 pub mod constant_pool;
-pub mod descriptor;
+pub mod descriptors;
 pub mod names;
 
 use std::borrow::Cow;
@@ -29,7 +29,10 @@ use crate::constant_pool::{
     read_constant_pool, read_cp_classinfo, read_cp_classinfo_opt, read_cp_utf8, ConstantPoolEntry,
     ConstantPoolIter,
 };
-use crate::descriptor::{FieldType, MethodDescriptor, ReturnDescriptor};
+use crate::descriptors::{
+    parse_field_descriptor, parse_method_descriptor, FieldDescriptor, MethodDescriptor,
+    ReturnDescriptor,
+};
 pub use crate::error::ParseError;
 use crate::names::{is_unqualified_method_name, is_unqualified_name};
 
@@ -147,7 +150,7 @@ bitflags! {
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
     pub name: Cow<'a, str>,
-    pub descriptor: FieldType<'a>,
+    pub descriptor: FieldDescriptor<'a>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -159,7 +162,7 @@ fn read_fields<'a>(
 ) -> Result<Vec<FieldInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut fields = Vec::with_capacity(count.into());
-    let mut unique_ids: HashSet<(Cow<'a, str>, FieldType<'a>)> = HashSet::new();
+    let mut unique_ids: HashSet<(Cow<'a, str>, FieldDescriptor<'a>)> = HashSet::new();
     for i in 0..count {
         let access_flags = FieldAccessFlags::from_bits_truncate(read_u2(bytes, ix)?);
         let name =
@@ -169,7 +172,7 @@ fn read_fields<'a>(
         }
         let descriptor = read_cp_utf8(bytes, ix, pool)
             .map_err(|e| err!(e, "descriptor of class field {}", i))?;
-        let descriptor = FieldType::parse(&descriptor)?;
+        let descriptor = parse_field_descriptor(&descriptor, 0)?;
 
         let unique_id = (name.clone(), descriptor.clone());
         if !unique_ids.insert(unique_id) {
@@ -235,14 +238,14 @@ fn read_methods<'a>(
             fail!("Invalid unqualified name for class method {}", i);
         }
         let descriptor = read_cp_utf8(bytes, ix, pool)
+            .and_then(|d| parse_method_descriptor(&d, 0))
             .map_err(|e| err!(e, "descriptor of class method {}", i))?;
-        let descriptor = MethodDescriptor::parse(&descriptor)?;
 
-        if allow_init && name == "<init>" && descriptor.result != ReturnDescriptor::Void {
+        if allow_init && name == "<init>" && descriptor.return_type != ReturnDescriptor::Void {
             fail!("Non-void method descriptor for init method {}", i);
         }
         if name == "<clinit>" {
-            if descriptor.result != ReturnDescriptor::Void {
+            if descriptor.return_type != ReturnDescriptor::Void {
                 fail!("Non-void method descriptor for clinit method {}", i);
             }
             if major_version >= 51 && !descriptor.parameters.is_empty() {

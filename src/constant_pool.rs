@@ -7,9 +7,9 @@ use std::ops::DerefMut;
 #[cfg(feature = "threadsafe")]
 use std::sync::Mutex;
 
+use crate::descriptors::{is_array_descriptor, is_field_descriptor, is_method_descriptor};
 use crate::names::{
-    is_array_descriptor, is_binary_name, is_field_descriptor, is_method_descriptor, is_module_name,
-    is_unqualified_method_name, is_unqualified_name,
+    is_binary_name, is_module_name, is_unqualified_method_name, is_unqualified_name,
 };
 use crate::{read_u1, read_u2, read_u4, read_u8, CafeRc, ParseError};
 

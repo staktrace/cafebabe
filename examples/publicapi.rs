@@ -17,7 +17,7 @@ fn main() {
                     {
                         continue;
                     }
-                    println!("    {} {}", field.name, field.descriptor);
+                    println!("    {} {:?}", field.name, field.descriptor);
                 }
                 for method in class.methods {
                     if method
@@ -26,7 +26,7 @@ fn main() {
                     {
                         continue;
                     }
-                    println!("    {} {}", method.name, method.descriptor);
+                    println!("    {} {:?}", method.name, method.descriptor);
                 }
             }
             Err(e) => eprintln!("Error: {} when parsing {:?}", e, arg),

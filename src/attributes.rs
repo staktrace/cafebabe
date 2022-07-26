@@ -346,6 +346,7 @@ pub enum AttributeData<'a> {
     ModuleMainClass(Cow<'a, str>),
     NestHost(Cow<'a, str>),
     NestMembers(Vec<Cow<'a, str>>),
+    PermittedSubclasses(Vec<Cow<'a, str>>),
     Record(Vec<RecordComponentEntry<'a>>),
     Other(&'a [u8]),
 }
@@ -1010,6 +1011,21 @@ fn read_nestmembers_data<'a>(
     Ok(members)
 }
 
+fn read_permitted_subclasses_data<'a>(
+    bytes: &'a [u8],
+    ix: &mut usize,
+    pool: &[Rc<ConstantPoolEntry<'a>>],
+) -> Result<Vec<Cow<'a, str>>, ParseError> {
+    let count = read_u2(bytes, ix)?;
+    let mut permitted_subclasses = Vec::with_capacity(count.into());
+    for i in 0..count {
+        let subclass =
+            read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "permitted subclass {}", i))?;
+        permitted_subclasses.push(subclass);
+    }
+    Ok(permitted_subclasses)
+}
+
 fn read_record_data<'a>(
     bytes: &'a [u8],
     ix: &mut usize,
@@ -1214,6 +1230,11 @@ pub(crate) fn read_attributes<'a>(
                 let nestmembers_data = read_nestmembers_data(bytes, ix, pool)
                     .map_err(|e| err!(e, "NestMembers attribute {}", i))?;
                 AttributeData::NestMembers(nestmembers_data)
+            }
+            "PermittedSubclasses" => {
+                let permitted_subclasses_data = read_permitted_subclasses_data(bytes, ix, pool)
+                    .map_err(|e| err!(e, "PermittedSubclasses attribute {}", i))?;
+                AttributeData::PermittedSubclasses(permitted_subclasses_data)
             }
             "Record" => {
                 let record_data = read_record_data(bytes, ix, pool, opts)

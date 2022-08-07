@@ -1,6 +1,6 @@
 [package]
 name = "cafebabe"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Kartikaya Gupta"]
 edition = "2018"
 license = "0BSD"

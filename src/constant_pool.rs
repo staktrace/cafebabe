@@ -1085,11 +1085,18 @@ impl<'a> Iterator for ConstantPoolIter<'a> {
     type Item = ConstantPoolItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.index < self.constant_pool.len() {
-            self.index += 1;
-            let item = match self.constant_pool[self.index].deref() {
-                ConstantPoolEntry::Zero => panic!("This iterator should never see a Zero item"),
-                ConstantPoolEntry::Utf8(_) | ConstantPoolEntry::Utf8Bytes(_) => continue,
+        let (offset, next_item) = self.constant_pool
+            .get(self.index..)?
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| {
+                match item.deref().deref() {
+                    ConstantPoolEntry::Zero => panic!("This iterator should never see a Zero item"),
+                    ConstantPoolEntry::Utf8(_) | ConstantPoolEntry::Utf8Bytes(_) | ConstantPoolEntry::Unused => false,
+                    _ => true,
+                }
+            }).map(|(offset, item)| {
+            let next_item = match item.deref() {
                 ConstantPoolEntry::Integer(v) => {
                     ConstantPoolItem::LiteralConstant(LiteralConstant::Integer(*v))
                 }
@@ -1149,12 +1156,13 @@ impl<'a> Iterator for ConstantPoolIter<'a> {
                 }
                 ConstantPoolEntry::PackageInfo(x) => {
                     ConstantPoolItem::PackageInfo(x.borrow().get().utf8())
-                }
-                ConstantPoolEntry::Unused => continue,
+                },
+                _ => panic!("Unexpected ConstantPoolEntry type")
             };
-            return Some(item);
-        }
-        None
+            (offset, next_item)
+        }).next()?;
+        self.index += offset;
+        Some(next_item)
     }
 }
 

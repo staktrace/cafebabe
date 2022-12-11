@@ -1085,7 +1085,7 @@ impl<'a> Iterator for ConstantPoolIter<'a> {
     type Item = ConstantPoolItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.index < self.constant_pool.len() {
+        while self.index + 1 < self.constant_pool.len() {
             self.index += 1;
             let item = match self.constant_pool[self.index].deref() {
                 ConstantPoolEntry::Zero => panic!("This iterator should never see a Zero item"),

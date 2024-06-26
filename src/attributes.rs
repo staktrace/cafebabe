@@ -130,7 +130,7 @@ pub enum AnnotationElementValue<'a> {
     BooleanConstant(i32),
     StringConstant(Cow<'a, str>),
     EnumConstant {
-        type_name: Cow<'a, str>,
+        type_name: FieldType<'a>,
         const_name: Cow<'a, str>,
     },
     ClassLiteral {
@@ -663,10 +663,9 @@ fn read_annotation_element_value<'a>(
         'Z' => AnnotationElementValue::BooleanConstant(read_cp_integer(bytes, ix, pool)?),
         's' => AnnotationElementValue::StringConstant(read_cp_utf8(bytes, ix, pool)?),
         'e' => {
-            let type_name = read_cp_utf8(bytes, ix, pool)?;
-            if !is_field_descriptor(&type_name) {
-                fail!("Invalid enum descriptor");
-            }
+            let type_name = read_cp_utf8(bytes, ix, pool)
+                .and_then(|descriptor| FieldType::parse(&descriptor))
+                .map_err(|e| err!(e, "annotation element value enum descriptor"))?;
             let const_name = read_cp_utf8(bytes, ix, pool)?;
             AnnotationElementValue::EnumConstant {
                 type_name,

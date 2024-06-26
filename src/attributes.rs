@@ -13,7 +13,7 @@ use crate::constant_pool::{
     BootstrapArgument, ConstantPoolEntry, LiteralConstant, MethodHandle, NameAndType,
 };
 use crate::descriptor::FieldType;
-use crate::names::{is_field_descriptor, is_return_descriptor, is_unqualified_name};
+use crate::names::{is_return_descriptor, is_unqualified_name};
 use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError, ParseOptions};
 
 #[derive(Debug)]
@@ -105,7 +105,7 @@ pub struct LocalVariableEntry<'a> {
     pub start_pc: u16,
     pub length: u16,
     pub name: Cow<'a, str>,
-    pub descriptor: Cow<'a, str>,
+    pub descriptor: FieldType<'a>,
     pub index: u16,
 }
 
@@ -602,11 +602,9 @@ fn read_localvariable_data<'a>(
         if !is_unqualified_name(&name) {
             fail!("Invalid unqualified name for variable {}", i);
         }
-        let descriptor =
-            read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor for variable {}", i))?;
-        if !is_field_descriptor(&descriptor) {
-            fail!("Invalid descriptor for variable {}", i);
-        }
+        let descriptor = read_cp_utf8(bytes, ix, pool)
+            .and_then(|descriptor| FieldType::parse(&descriptor))
+            .map_err(|e| err!(e, "descriptor for variable {}", i))?;
         let index = read_u2(bytes, ix)?;
         localvariables.push(LocalVariableEntry {
             start_pc,

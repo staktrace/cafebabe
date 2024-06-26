@@ -774,7 +774,7 @@ fn read_type_annotation_data<'a>(
                 type_parameter_index: read_u1(bytes, ix)?,
                 bound_index: read_u1(bytes, ix)?,
             },
-            0x13 | 0x14 | 0x15 => TypeAnnotationTarget::Empty,
+            0x13..=0x15 => TypeAnnotationTarget::Empty,
             0x16 => TypeAnnotationTarget::FormalParameter {
                 index: read_u1(bytes, ix)?,
             },
@@ -799,10 +799,10 @@ fn read_type_annotation_data<'a>(
             0x42 => TypeAnnotationTarget::Catch {
                 exception_table_index: read_u2(bytes, ix)?,
             },
-            0x43 | 0x44 | 0x45 | 0x46 => TypeAnnotationTarget::Offset {
+            0x43..=0x46 => TypeAnnotationTarget::Offset {
                 offset: read_u2(bytes, ix)?,
             },
-            0x47 | 0x48 | 0x49 | 0x4A | 0x4B => TypeAnnotationTarget::TypeArgument {
+            0x47..=0x4B => TypeAnnotationTarget::TypeArgument {
                 offset: read_u2(bytes, ix)?,
                 type_argument_index: read_u1(bytes, ix)?,
             },

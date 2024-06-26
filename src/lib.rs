@@ -328,13 +328,15 @@ pub struct ParseOptions {
     parse_bytecode: bool,
 }
 
-impl ParseOptions {
-    pub fn default() -> Self {
+impl Default for ParseOptions {
+    fn default() -> Self {
         Self {
             parse_bytecode: true,
         }
     }
+}
 
+impl ParseOptions {
     /// Turns on or off parsing of bytecode from the Code attributes of methods. If parsing
     /// is enabled, the CodeData structure's optional bytecode field will be populated
     /// (or parsing will fail entirely if bytecode parsing failed). If parsing is disabled,

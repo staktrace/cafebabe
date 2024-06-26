@@ -148,7 +148,7 @@ pub struct AnnotationElement<'a> {
 
 #[derive(Debug)]
 pub struct Annotation<'a> {
-    pub type_descriptor: Cow<'a, str>,
+    pub type_descriptor: FieldType<'a>,
     pub elements: Vec<AnnotationElement<'a>>,
 }
 
@@ -702,11 +702,9 @@ fn read_annotation<'a>(
     ix: &mut usize,
     pool: &[Rc<ConstantPoolEntry<'a>>],
 ) -> Result<Annotation<'a>, ParseError> {
-    let type_descriptor =
-        read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "type descriptor field"))?;
-    if !is_field_descriptor(&type_descriptor) {
-        fail!("Invalid descriptor");
-    }
+    let type_descriptor = read_cp_utf8(bytes, ix, pool)
+        .and_then(|descriptor| FieldType::parse(&descriptor))
+        .map_err(|e| err!(e, "type descriptor field"))?;
     let element_count = read_u2(bytes, ix)?;
     let mut elements = Vec::with_capacity(element_count.into());
     for i in 0..element_count {

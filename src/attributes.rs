@@ -12,6 +12,7 @@ use crate::constant_pool::{
 use crate::constant_pool::{
     BootstrapArgument, ConstantPoolEntry, LiteralConstant, MethodHandle, NameAndType,
 };
+use crate::descriptor::FieldType;
 use crate::names::{is_field_descriptor, is_return_descriptor, is_unqualified_name};
 use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError, ParseOptions};
 
@@ -309,7 +310,7 @@ pub struct ModuleData<'a> {
 #[derive(Debug)]
 pub struct RecordComponentEntry<'a> {
     pub name: Cow<'a, str>,
-    pub descriptor: Cow<'a, str>,
+    pub descriptor: FieldType<'a>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
@@ -1039,11 +1040,9 @@ fn read_record_data<'a>(
         if !is_unqualified_name(&name) {
             fail!("Invalid unqualified name for entry {}", i);
         }
-        let descriptor =
-            read_cp_utf8(bytes, ix, pool).map_err(|e| err!(e, "descriptor of entry {}", i))?;
-        if !is_field_descriptor(&descriptor) {
-            fail!("Invalid descriptor for entry {}", i);
-        }
+        let descriptor = read_cp_utf8(bytes, ix, pool)
+            .and_then(|descriptor| FieldType::parse(&descriptor))
+            .map_err(|e| err!(e, "descriptor of entry {}", i))?;
         let attributes =
             read_attributes(bytes, ix, pool, opts).map_err(|e| err!(e, "entry {}", i))?;
         components.push(RecordComponentEntry {

@@ -18,7 +18,7 @@ pub struct LookupTable {
     pub match_offsets: Vec<(i32, JumpOffset)>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct RangeTable {
     pub default: JumpOffset,
     pub low: i32,

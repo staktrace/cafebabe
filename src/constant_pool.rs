@@ -781,7 +781,7 @@ pub(crate) fn read_cp_nameandtype_opt<'a>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum LiteralConstant<'a> {
     Integer(i32),
     Float(f32),

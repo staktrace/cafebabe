@@ -958,7 +958,7 @@ pub enum MemberKind {
     InterfaceMethod,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MethodHandle<'a> {
     pub kind: ReferenceKind,
     pub class_name: Cow<'a, str>,

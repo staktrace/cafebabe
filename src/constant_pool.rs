@@ -855,7 +855,7 @@ pub(crate) fn read_cp_double<'a>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MemberRef<'a> {
     pub class_name: Cow<'a, str>,
     pub name_and_type: NameAndType<'a>,

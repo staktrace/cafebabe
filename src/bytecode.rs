@@ -12,7 +12,7 @@ use crate::{read_u1, read_u2, read_u4, ParseError};
 
 pub type JumpOffset = i32;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LookupTable {
     pub default: JumpOffset,
     pub match_offsets: Vec<(i32, JumpOffset)>,

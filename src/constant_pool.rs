@@ -909,7 +909,7 @@ pub struct Dynamic<'a> {
     pub name_and_type: NameAndType<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Loadable<'a> {
     LiteralConstant(LiteralConstant<'a>),
     ClassInfo(Cow<'a, str>),

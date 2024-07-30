@@ -137,7 +137,7 @@ impl<'a> fmt::Display for FieldType<'a> {
 }
 
 /// BaseType as described in Table 4.3-A. of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2-200)
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum BaseType {
     /// B, byte, signed byte
     Byte,

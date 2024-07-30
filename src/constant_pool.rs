@@ -759,7 +759,7 @@ pub(crate) fn read_cp_packageinfo<'a>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NameAndType<'a> {
     pub name: Cow<'a, str>,
     pub descriptor: Cow<'a, str>,

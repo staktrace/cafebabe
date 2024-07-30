@@ -882,7 +882,7 @@ pub(crate) fn read_cp_memberref<'a>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct InvokeDynamic<'a> {
     pub attr_index: u16,
     pub name_and_type: NameAndType<'a>,

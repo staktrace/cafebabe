@@ -903,7 +903,7 @@ pub(crate) fn read_cp_invokedynamic<'a>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Dynamic<'a> {
     pub attr_index: u16,
     pub name_and_type: NameAndType<'a>,

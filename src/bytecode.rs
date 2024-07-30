@@ -26,7 +26,7 @@ pub struct RangeTable {
     pub jumps: Vec<JumpOffset>,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PrimitiveArrayType {
     Boolean,
     Char,

@@ -38,7 +38,7 @@ pub enum PrimitiveArrayType {
     Long,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Opcode<'a> {
     Aaload,
     Aastore,

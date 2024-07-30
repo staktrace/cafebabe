@@ -72,7 +72,7 @@ impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash)]
 pub enum ReferenceKind {
     GetField,
     GetStatic,

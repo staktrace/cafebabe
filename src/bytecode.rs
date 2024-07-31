@@ -143,7 +143,7 @@ pub enum Opcode<'a> {
     Impdep2,
     Imul,
     Ineg,
-    Instanceof(Cow<'a, str>),
+    Instanceof(FieldType<'a>),
     Invokedynamic(InvokeDynamic<'a>),
     Invokeinterface(MemberRef<'a>, u8),
     Invokespecial(MemberRef<'a>),
@@ -643,8 +643,14 @@ fn read_opcodes<'a>(
             }),
             0xbe => Opcode::Arraylength,
             0xbf => Opcode::Athrow,
-            0xc1 => Opcode::Instanceof(read_cp_classinfo(code, &mut ix, pool)?),
             0xc0 => Opcode::Checkcast({
+                let ty = read_cp_classinfo(code, &mut ix, pool)?;
+                match FieldType::parse(&ty) {
+                    Ok(ty) => ty,
+                    Err(_) => FieldType::Ty(Ty::Object(ty)),
+                }
+            }),
+            0xc1 => Opcode::Instanceof({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;
                 match FieldType::parse(&ty) {
                     Ok(ty) => ty,

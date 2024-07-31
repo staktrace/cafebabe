@@ -56,7 +56,7 @@ pub enum Opcode<'a> {
     Breakpoint,
     Caload,
     Castore,
-    Checkcast(Cow<'a, str>),
+    Checkcast(FieldType<'a>),
     D2f,
     D2i,
     D2l,
@@ -643,8 +643,14 @@ fn read_opcodes<'a>(
             }),
             0xbe => Opcode::Arraylength,
             0xbf => Opcode::Athrow,
-            0xc0 => Opcode::Checkcast(read_cp_classinfo(code, &mut ix, pool)?),
             0xc1 => Opcode::Instanceof(read_cp_classinfo(code, &mut ix, pool)?),
+            0xc0 => Opcode::Checkcast({
+                let ty = read_cp_classinfo(code, &mut ix, pool)?;
+                match FieldType::parse(&ty) {
+                    Ok(ty) => ty,
+                    Err(_) => FieldType::Ty(Ty::Object(ty)),
+                }
+            }),
             0xc2 => Opcode::Monitorenter,
             0xc3 => Opcode::Monitorexit,
             0xc4 => {

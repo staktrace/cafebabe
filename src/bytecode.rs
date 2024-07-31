@@ -9,6 +9,7 @@ use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
 };
 use crate::{read_u1, read_u2, read_u4, ParseError};
+use crate::descriptor::FieldType;
 
 pub type JumpOffset = i32;
 
@@ -187,7 +188,7 @@ pub enum Opcode<'a> {
     Lxor,
     Monitorenter,
     Monitorexit,
-    Multianewarray(Cow<'a, str>, u8),
+    Multianewarray(FieldType<'a>, u8),
     New(Cow<'a, str>),
     Newarray(PrimitiveArrayType),
     Nop,
@@ -663,7 +664,7 @@ fn read_opcodes<'a>(
                 }
             }
             0xc5 => Opcode::Multianewarray(
-                read_cp_classinfo(code, &mut ix, pool)?,
+                FieldType::parse(&read_cp_classinfo(code, &mut ix, pool)?)?,
                 read_u1(code, &mut ix)?,
             ),
             0xc6 => Opcode::Ifnull((read_u2(code, &mut ix)? as i16).into()),

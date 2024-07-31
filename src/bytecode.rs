@@ -8,8 +8,8 @@ use crate::constant_pool::{
 use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
 };
-use crate::{read_u1, read_u2, read_u4, ParseError};
 use crate::descriptor::FieldType;
+use crate::{read_u1, read_u2, read_u4, ParseError};
 
 pub type JumpOffset = i32;
 

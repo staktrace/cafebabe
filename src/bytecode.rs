@@ -8,7 +8,7 @@ use crate::constant_pool::{
 use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
 };
-use crate::descriptor::FieldType;
+use crate::descriptor::{FieldType, Ty};
 use crate::{read_u1, read_u2, read_u4, ParseError};
 
 pub type JumpOffset = i32;
@@ -45,7 +45,7 @@ pub enum Opcode<'a> {
     Aastore,
     AconstNull,
     Aload(u16), // both wide and narrow
-    Anewarray(Cow<'a, str>),
+    Anewarray(FieldType<'a>),
     Areturn,
     Arraylength,
     Astore(u16), // both wide and narrow
@@ -634,7 +634,13 @@ fn read_opcodes<'a>(
                 };
                 Opcode::Newarray(primitive_type)
             }
-            0xbd => Opcode::Anewarray(read_cp_classinfo(code, &mut ix, pool)?),
+            0xbd => Opcode::Anewarray({
+                let ty = read_cp_classinfo(code, &mut ix, pool)?;
+                match FieldType::parse(&ty) {
+                    Ok(ty) => ty,
+                    Err(_) => FieldType::Ty(Ty::Object(ty)),
+                }
+            }),
             0xbe => Opcode::Arraylength,
             0xbf => Opcode::Athrow,
             0xc0 => Opcode::Checkcast(read_cp_classinfo(code, &mut ix, pool)?),

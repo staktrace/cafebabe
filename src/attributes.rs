@@ -16,7 +16,7 @@ use crate::descriptor::FieldType;
 use crate::names::{is_return_descriptor, is_unqualified_name};
 use crate::{read_u1, read_u2, read_u4, AccessFlags, ParseError, ParseOptions};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExceptionTableEntry<'a> {
     pub start_pc: u16,
     pub end_pc: u16,
@@ -24,7 +24,7 @@ pub struct ExceptionTableEntry<'a> {
     pub catch_type: Option<Cow<'a, str>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct CodeData<'a> {
     pub max_stack: u16,
     pub max_locals: u16,
@@ -34,7 +34,7 @@ pub struct CodeData<'a> {
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum VerificationType<'a> {
     Top,
     Integer,
@@ -47,7 +47,7 @@ pub enum VerificationType<'a> {
     Object { class_name: Cow<'a, str> },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StackMapEntry<'a> {
     Same {
         offset_delta: u16,
@@ -86,7 +86,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InnerClassEntry<'a> {
     pub inner_class_info: Cow<'a, str>,
     pub outer_class_info: Option<Cow<'a, str>>,
@@ -94,13 +94,13 @@ pub struct InnerClassEntry<'a> {
     pub access_flags: InnerClassAccessFlags,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LineNumberEntry {
     pub start_pc: u16,
     pub line_number: u16,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LocalVariableEntry<'a> {
     pub start_pc: u16,
     pub length: u16,
@@ -109,7 +109,7 @@ pub struct LocalVariableEntry<'a> {
     pub index: u16,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LocalVariableTypeEntry<'a> {
     pub start_pc: u16,
     pub length: u16,
@@ -118,7 +118,7 @@ pub struct LocalVariableTypeEntry<'a> {
     pub index: u16,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum AnnotationElementValue<'a> {
     ByteConstant(i32),
     CharConstant(i32),
@@ -140,31 +140,31 @@ pub enum AnnotationElementValue<'a> {
     ArrayValue(Vec<AnnotationElementValue<'a>>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct AnnotationElement<'a> {
     pub name: Cow<'a, str>,
     pub value: AnnotationElementValue<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Annotation<'a> {
     pub type_descriptor: FieldType<'a>,
     pub elements: Vec<AnnotationElement<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct ParameterAnnotation<'a> {
     pub annotations: Vec<Annotation<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TypeAnnotationLocalVarTargetEntry {
     pub start_pc: u16,
     pub length: u16,
     pub index: u16,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TypeAnnotationTarget {
     TypeParameter {
         index: u8,
@@ -196,7 +196,7 @@ pub enum TypeAnnotationTarget {
     },
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TypeAnnotationTargetPathKind {
     DeeperArray,
     DeeperNested,
@@ -204,20 +204,20 @@ pub enum TypeAnnotationTargetPathKind {
     TypeArgument,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TypeAnnotationTargetPathEntry {
     pub path_kind: TypeAnnotationTargetPathKind,
     pub argument_index: u8,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct TypeAnnotation<'a> {
     pub target_type: TypeAnnotationTarget,
     pub target_path: Vec<TypeAnnotationTargetPathEntry>,
     pub annotation: Annotation<'a>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct BootstrapMethodEntry<'a> {
     pub method: MethodHandle<'a>,
     pub arguments: Vec<BootstrapArgument<'a>>,
@@ -231,7 +231,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MethodParameterEntry<'a> {
     pub name: Option<Cow<'a, str>>,
     pub access_flags: MethodParameterAccessFlags,
@@ -254,7 +254,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ModuleRequireEntry<'a> {
     pub name: Cow<'a, str>,
     pub flags: ModuleRequiresFlags,
@@ -268,7 +268,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ModuleExportsEntry<'a> {
     pub package_name: Cow<'a, str>,
     pub flags: ModuleExportsFlags,
@@ -282,20 +282,20 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ModuleOpensEntry<'a> {
     pub package_name: Cow<'a, str>,
     pub flags: ModuleOpensFlags,
     pub opens_to: Vec<Cow<'a, str>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ModuleProvidesEntry<'a> {
     pub service_interface_name: Cow<'a, str>,
     pub provides_with: Vec<Cow<'a, str>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct ModuleData<'a> {
     pub name: Cow<'a, str>,
     pub access_flags: ModuleAccessFlags,
@@ -307,14 +307,14 @@ pub struct ModuleData<'a> {
     pub provides: Vec<ModuleProvidesEntry<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct RecordComponentEntry<'a> {
     pub name: Cow<'a, str>,
     pub descriptor: FieldType<'a>,
     pub attributes: Vec<AttributeInfo<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum AttributeData<'a> {
     ConstantValue(LiteralConstant<'a>),
     Code(CodeData<'a>),
@@ -352,7 +352,7 @@ pub enum AttributeData<'a> {
     Other(&'a [u8]),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct AttributeInfo<'a> {
     pub name: Cow<'a, str>,
     pub data: AttributeData<'a>,

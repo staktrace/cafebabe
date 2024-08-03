@@ -9,7 +9,7 @@ use std::{
 use crate::ParseError;
 
 /// MethodDescriptor as described in section 4.3.3 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.3)
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MethodDescriptor<'a> {
     pub parameters: Vec<FieldType<'a>>,
     pub result: ReturnDescriptor<'a>,
@@ -58,7 +58,7 @@ impl<'a> fmt::Display for MethodDescriptor<'a> {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Ty<'a> {
     Base(BaseType),
     Object(Cow<'a, str>),
@@ -74,7 +74,7 @@ impl<'a> fmt::Display for Ty<'a> {
 }
 
 /// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2)
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FieldType<'a> {
     Ty(Ty<'a>),
     Array { dimensions: usize, ty: Ty<'a> },
@@ -193,7 +193,7 @@ impl fmt::Display for BaseType {
 }
 
 /// ReturnDescriptor
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReturnDescriptor<'a> {
     Return(FieldType<'a>),
     Void,

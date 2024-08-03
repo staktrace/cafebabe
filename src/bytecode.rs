@@ -12,13 +12,13 @@ use crate::{read_u1, read_u2, read_u4, ParseError};
 
 pub type JumpOffset = i32;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LookupTable {
     pub default: JumpOffset,
     pub match_offsets: Vec<(i32, JumpOffset)>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct RangeTable {
     pub default: JumpOffset,
     pub low: i32,
@@ -38,7 +38,7 @@ pub enum PrimitiveArrayType {
     Long,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Opcode<'a> {
     Aaload,
     Aastore,
@@ -204,7 +204,7 @@ pub enum Opcode<'a> {
     Tableswitch(RangeTable),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct ByteCode<'a> {
     /// This contains pairs of (offset, opcode) where offset is the offset of the start
     /// of the opcode in bytes from the beginning of the data section of the Code attribute.

@@ -72,7 +72,7 @@ impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Hash)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ReferenceKind {
     GetField,
     GetStatic,
@@ -759,7 +759,7 @@ pub(crate) fn read_cp_packageinfo<'a>(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NameAndType<'a> {
     pub name: Cow<'a, str>,
     pub descriptor: Cow<'a, str>,
@@ -781,7 +781,7 @@ pub(crate) fn read_cp_nameandtype_opt<'a>(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum LiteralConstant<'a> {
     Integer(i32),
     Float(f32),
@@ -855,7 +855,7 @@ pub(crate) fn read_cp_double<'a>(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MemberRef<'a> {
     pub class_name: Cow<'a, str>,
     pub name_and_type: NameAndType<'a>,
@@ -882,7 +882,7 @@ pub(crate) fn read_cp_memberref<'a>(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InvokeDynamic<'a> {
     pub attr_index: u16,
     pub name_and_type: NameAndType<'a>,
@@ -903,13 +903,13 @@ pub(crate) fn read_cp_invokedynamic<'a>(
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Dynamic<'a> {
     pub attr_index: u16,
     pub name_and_type: NameAndType<'a>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Loadable<'a> {
     LiteralConstant(LiteralConstant<'a>),
     ClassInfo(Cow<'a, str>),
@@ -951,14 +951,14 @@ pub(crate) fn get_cp_loadable<'a>(
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MemberKind {
     Field,
     Method,
     InterfaceMethod,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MethodHandle<'a> {
     pub kind: ReferenceKind,
     pub class_name: Cow<'a, str>,
@@ -1008,7 +1008,7 @@ pub(crate) fn read_cp_methodhandle<'a>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum BootstrapArgument<'a> {
     LiteralConstant(LiteralConstant<'a>),
     ClassInfo(Cow<'a, str>),

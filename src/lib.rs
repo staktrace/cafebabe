@@ -134,7 +134,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct FieldInfo<'a> {
     pub access_flags: FieldAccessFlags,
     pub name: Cow<'a, str>,
@@ -198,7 +198,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct MethodInfo<'a> {
     pub access_flags: MethodAccessFlags,
     pub name: Cow<'a, str>,
@@ -302,7 +302,7 @@ fn validate_bootstrap_methods<'a>(
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ClassFile<'a> {
     pub major_version: u16,
     pub minor_version: u16,

@@ -55,7 +55,10 @@ fn test_validate_class_info() {
     assert_validate_passes!(ClassInfo(wrap(Utf8(Cow::from("some/package/Class")))));
     assert_validate_passes!(ClassInfo(wrap(Utf8(Cow::from("[Lsome/package/Class;")))));
 
-    assert_validate_fails!(ClassInfo(wrap(Utf8(Cow::from("")))), "Invalid binary name");
+    assert_validate_fails!(
+        ClassInfo(wrap(Utf8(Cow::from("")))),
+        "Invalid classinfo name"
+    );
     assert_validate_fails!(
         ClassInfo(wrap(Utf8Bytes(&[]))),
         "Attempting to get utf-8 data from non-utf8 constant pool entry!"

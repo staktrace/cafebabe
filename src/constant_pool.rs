@@ -311,7 +311,7 @@ impl<'a> ConstantPoolEntry<'a> {
         if is_binary_name(x) || is_array_descriptor(x) {
             Ok(())
         } else {
-            fail!("Invalid binary name")
+            fail!("Invalid classinfo name")
         }
     }
 

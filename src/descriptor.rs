@@ -99,7 +99,6 @@ impl<'a> ReferenceType<'a> {
     ) -> Result<Self, ParseError> {
         let mut array_depth = 0;
 
-
         while let Some(ch) = chars_idx.next().map(|(_, ch)| ch) {
             match ch {
                 '[' => {
@@ -112,13 +111,19 @@ impl<'a> ReferenceType<'a> {
                     }
                 }
                 'L' if array_depth != 0 => {
-                    return Ok(ReferenceType::Array {dimensions: array_depth, ty: Ty::Object(parse_object(chars, chars_idx)?)});
+                    return Ok(ReferenceType::Array {
+                        dimensions: array_depth,
+                        ty: Ty::Object(parse_object(chars, chars_idx)?),
+                    });
                 }
                 ch => {
                     return Ok(if array_depth == 0 {
                         ReferenceType::Object(chars.clone())
                     } else {
-                        ReferenceType::Array {dimensions: array_depth, ty: Ty::Base(BaseType::parse(ch)?)}
+                        ReferenceType::Array {
+                            dimensions: array_depth,
+                            ty: Ty::Base(BaseType::parse(ch)?),
+                        }
                     })
                 }
             };

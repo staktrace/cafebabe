@@ -651,7 +651,9 @@ fn read_opcodes<'a>(
                     Err(_) => FieldType::Ty(Ty::Object(ty)),
                 };
                 match ty {
-                    FieldType::Ty(Ty::Base(base)) => FieldType::Ty(Ty::Object(Cow::Owned(base.to_string()))),
+                    FieldType::Ty(Ty::Base(base)) => {
+                        FieldType::Ty(Ty::Object(Cow::Owned(base.to_string())))
+                    }
                     ty => ty,
                 }
             }),

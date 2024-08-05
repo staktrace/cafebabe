@@ -636,25 +636,37 @@ fn read_opcodes<'a>(
             }
             0xbd => Opcode::Anewarray({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;
-                match FieldType::parse(&ty) {
+                let ty = match FieldType::parse(&ty) {
                     Ok(ty) => ty,
                     Err(_) => FieldType::Ty(Ty::Object(ty)),
+                };
+                match ty {
+                    FieldType::Ty(Ty::Base(base)) => FieldType::Ty(Ty::Object(Cow::Owned(base.to_string()))),
+                    ty => ty,
                 }
             }),
             0xbe => Opcode::Arraylength,
             0xbf => Opcode::Athrow,
             0xc0 => Opcode::Checkcast({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;
-                match FieldType::parse(&ty) {
+                let ty = match FieldType::parse(&ty) {
                     Ok(ty) => ty,
                     Err(_) => FieldType::Ty(Ty::Object(ty)),
+                };
+                match ty {
+                    FieldType::Ty(Ty::Base(base)) => FieldType::Ty(Ty::Object(Cow::Owned(base.to_string()))),
+                    ty => ty,
                 }
             }),
             0xc1 => Opcode::Instanceof({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;
-                match FieldType::parse(&ty) {
+                let ty = match FieldType::parse(&ty) {
                     Ok(ty) => ty,
                     Err(_) => FieldType::Ty(Ty::Object(ty)),
+                };
+                match ty {
+                    FieldType::Ty(Ty::Base(base)) => FieldType::Ty(Ty::Object(Cow::Owned(base.to_string()))),
+                    ty => ty,
                 }
             }),
             0xc2 => Opcode::Monitorenter,

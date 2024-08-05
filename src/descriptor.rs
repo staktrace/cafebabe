@@ -80,6 +80,53 @@ pub enum FieldType<'a> {
     Array { dimensions: usize, ty: Ty<'a> },
 }
 
+/// FieldType as described in section 4.3.2 of the [JVM 18 specification](https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2)
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum ReferenceType<'a> {
+    Object(Cow<'a, str>),
+    Array { dimensions: usize, ty: Ty<'a> },
+}
+
+impl<'a> ReferenceType<'a> {
+    pub(crate) fn parse(chars: &Cow<'a, str>) -> Result<Self, ParseError> {
+        let mut chars_idx = chars.char_indices();
+        Self::parse_from_chars_idx(chars, &mut chars_idx)
+    }
+
+    fn parse_from_chars_idx(
+        chars: &Cow<'a, str>,
+        chars_idx: &mut CharIndices,
+    ) -> Result<Self, ParseError> {
+        let mut array_depth = 0;
+
+
+        while let Some(ch) = chars_idx.next().map(|(_, ch)| ch) {
+            match ch {
+                '[' => {
+                    array_depth += 1;
+
+                    // A field descriptor representing an array type is valid only if it represents a type with 255 or fewer dimensions.
+                    //  see: https://docs.oracle.com/javase/specs/jvms/se18/html/jvms-4.html#jvms-4.3.2
+                    if array_depth > 255 {
+                        fail!("Array exceeds 255 dimensions");
+                    }
+                }
+                'L' if array_depth != 0 => {
+                    return Ok(ReferenceType::Array {dimensions: array_depth, ty: Ty::Object(parse_object(chars, chars_idx)?)});
+                }
+                ch => {
+                    return Ok(if array_depth == 0 {
+                        ReferenceType::Object(chars.clone())
+                    } else {
+                        ReferenceType::Array {dimensions: array_depth, ty: Ty::Base(BaseType::parse(ch)?)}
+                    })
+                }
+            };
+        }
+        fail!("no ReferenceType found")
+    }
+}
+
 impl<'a> FieldType<'a> {
     pub(crate) fn parse(chars: &Cow<'a, str>) -> Result<Self, ParseError> {
         let mut chars_idx = chars.char_indices();

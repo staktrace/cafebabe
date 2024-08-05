@@ -8,7 +8,7 @@ use crate::constant_pool::{
 use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
 };
-use crate::descriptor::{FieldType, Ty};
+use crate::descriptor::{FieldType, ReferenceType, Ty};
 use crate::{read_u1, read_u2, read_u4, ParseError};
 
 pub type JumpOffset = i32;
@@ -45,7 +45,7 @@ pub enum Opcode<'a> {
     Aastore,
     AconstNull,
     Aload(u16), // both wide and narrow
-    Anewarray(FieldType<'a>),
+    Anewarray(ReferenceType<'a>),
     Areturn,
     Arraylength,
     Astore(u16), // both wide and narrow
@@ -56,7 +56,7 @@ pub enum Opcode<'a> {
     Breakpoint,
     Caload,
     Castore,
-    Checkcast(FieldType<'a>),
+    Checkcast(ReferenceType<'a>),
     D2f,
     D2i,
     D2l,
@@ -636,27 +636,13 @@ fn read_opcodes<'a>(
             }
             0xbd => Opcode::Anewarray({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;
-                let ty = match FieldType::parse(&ty) {
-                    Ok(ty) => ty,
-                    Err(_) => FieldType::Ty(Ty::Object(ty)),
-                };
-                match ty {
-                    FieldType::Ty(Ty::Base(base)) => FieldType::Ty(Ty::Object(Cow::Owned(base.to_string()))),
-                    ty => ty,
-                }
+                ReferenceType::parse(&ty)?
             }),
             0xbe => Opcode::Arraylength,
             0xbf => Opcode::Athrow,
             0xc0 => Opcode::Checkcast({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;
-                let ty = match FieldType::parse(&ty) {
-                    Ok(ty) => ty,
-                    Err(_) => FieldType::Ty(Ty::Object(ty)),
-                };
-                match ty {
-                    FieldType::Ty(Ty::Base(base)) => FieldType::Ty(Ty::Object(Cow::Owned(base.to_string()))),
-                    ty => ty,
-                }
+                ReferenceType::parse(&ty)?
             }),
             0xc1 => Opcode::Instanceof({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;

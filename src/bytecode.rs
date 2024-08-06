@@ -8,6 +8,7 @@ use crate::constant_pool::{
 use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
 };
+use crate::descriptor::ReferenceType;
 use crate::{read_u1, read_u2, read_u4, ParseError};
 
 pub type JumpOffset = i32;
@@ -44,7 +45,7 @@ pub enum Opcode<'a> {
     Aastore,
     AconstNull,
     Aload(u16), // both wide and narrow
-    Anewarray(Cow<'a, str>),
+    Anewarray(ReferenceType<'a>),
     Areturn,
     Arraylength,
     Astore(u16), // both wide and narrow
@@ -55,7 +56,7 @@ pub enum Opcode<'a> {
     Breakpoint,
     Caload,
     Castore,
-    Checkcast(Cow<'a, str>),
+    Checkcast(ReferenceType<'a>),
     D2f,
     D2i,
     D2l,
@@ -142,7 +143,7 @@ pub enum Opcode<'a> {
     Impdep2,
     Imul,
     Ineg,
-    Instanceof(Cow<'a, str>),
+    Instanceof(ReferenceType<'a>),
     Invokedynamic(InvokeDynamic<'a>),
     Invokeinterface(MemberRef<'a>, u8),
     Invokespecial(MemberRef<'a>),
@@ -187,7 +188,7 @@ pub enum Opcode<'a> {
     Lxor,
     Monitorenter,
     Monitorexit,
-    Multianewarray(Cow<'a, str>, u8),
+    Multianewarray(ReferenceType<'a>, u8),
     New(Cow<'a, str>),
     Newarray(PrimitiveArrayType),
     Nop,
@@ -633,11 +634,20 @@ fn read_opcodes<'a>(
                 };
                 Opcode::Newarray(primitive_type)
             }
-            0xbd => Opcode::Anewarray(read_cp_classinfo(code, &mut ix, pool)?),
+            0xbd => Opcode::Anewarray({
+                let ty = read_cp_classinfo(code, &mut ix, pool)?;
+                ReferenceType::parse(&ty)?
+            }),
             0xbe => Opcode::Arraylength,
             0xbf => Opcode::Athrow,
-            0xc0 => Opcode::Checkcast(read_cp_classinfo(code, &mut ix, pool)?),
-            0xc1 => Opcode::Instanceof(read_cp_classinfo(code, &mut ix, pool)?),
+            0xc0 => Opcode::Checkcast({
+                let ty = read_cp_classinfo(code, &mut ix, pool)?;
+                ReferenceType::parse(&ty)?
+            }),
+            0xc1 => Opcode::Instanceof({
+                let ty = read_cp_classinfo(code, &mut ix, pool)?;
+                ReferenceType::parse(&ty)?
+            }),
             0xc2 => Opcode::Monitorenter,
             0xc3 => Opcode::Monitorexit,
             0xc4 => {
@@ -663,7 +673,7 @@ fn read_opcodes<'a>(
                 }
             }
             0xc5 => Opcode::Multianewarray(
-                read_cp_classinfo(code, &mut ix, pool)?,
+                ReferenceType::parse(&read_cp_classinfo(code, &mut ix, pool)?)?,
                 read_u1(code, &mut ix)?,
             ),
             0xc6 => Opcode::Ifnull((read_u2(code, &mut ix)? as i16).into()),

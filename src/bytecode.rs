@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
-use crate::{ParseError, read_u1, read_u2, read_u4};
 use crate::constant_pool::{
     get_cp_loadable, read_cp_classinfo, read_cp_invokedynamic, read_cp_memberref,
 };
@@ -10,6 +9,7 @@ use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
 };
 use crate::descriptor::ReferenceType;
+use crate::{read_u1, read_u2, read_u4, ParseError};
 
 pub type JumpOffset = i32;
 

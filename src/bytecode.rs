@@ -2,14 +2,14 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::rc::Rc;
 
+use crate::{ParseError, read_u1, read_u2, read_u4};
 use crate::constant_pool::{
     get_cp_loadable, read_cp_classinfo, read_cp_invokedynamic, read_cp_memberref,
 };
 use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
 };
-use crate::descriptor::{FieldType, ReferenceType, Ty};
-use crate::{read_u1, read_u2, read_u4, ParseError};
+use crate::descriptor::ReferenceType;
 
 pub type JumpOffset = i32;
 
@@ -143,7 +143,7 @@ pub enum Opcode<'a> {
     Impdep2,
     Imul,
     Ineg,
-    Instanceof(FieldType<'a>),
+    Instanceof(ReferenceType<'a>),
     Invokedynamic(InvokeDynamic<'a>),
     Invokeinterface(MemberRef<'a>, u8),
     Invokespecial(MemberRef<'a>),
@@ -188,7 +188,7 @@ pub enum Opcode<'a> {
     Lxor,
     Monitorenter,
     Monitorexit,
-    Multianewarray(FieldType<'a>, u8),
+    Multianewarray(ReferenceType<'a>, u8),
     New(Cow<'a, str>),
     Newarray(PrimitiveArrayType),
     Nop,
@@ -646,16 +646,7 @@ fn read_opcodes<'a>(
             }),
             0xc1 => Opcode::Instanceof({
                 let ty = read_cp_classinfo(code, &mut ix, pool)?;
-                let ty = match FieldType::parse(&ty) {
-                    Ok(ty) => ty,
-                    Err(_) => FieldType::Ty(Ty::Object(ty)),
-                };
-                match ty {
-                    FieldType::Ty(Ty::Base(base)) => {
-                        FieldType::Ty(Ty::Object(Cow::Owned(base.to_string())))
-                    }
-                    ty => ty,
-                }
+                ReferenceType::parse(&ty)?
             }),
             0xc2 => Opcode::Monitorenter,
             0xc3 => Opcode::Monitorexit,
@@ -682,7 +673,7 @@ fn read_opcodes<'a>(
                 }
             }
             0xc5 => Opcode::Multianewarray(
-                FieldType::parse(&read_cp_classinfo(code, &mut ix, pool)?)?,
+                ReferenceType::parse(&read_cp_classinfo(code, &mut ix, pool)?)?,
                 read_u1(code, &mut ix)?,
             ),
             0xc6 => Opcode::Ifnull((read_u2(code, &mut ix)? as i16).into()),

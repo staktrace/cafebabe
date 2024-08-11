@@ -8,6 +8,8 @@ use crate::names::{
 };
 use crate::{read_u1, read_u2, read_u4, read_u8, CafeRc, ParseError};
 
+type CafeCell<T> = RefCell<T>;
+
 #[derive(Debug)]
 pub(crate) enum ConstantPoolRef<'a> {
     Unresolved(u16),
@@ -48,7 +50,7 @@ impl<'a> ConstantPoolRef<'a> {
     }
 }
 
-trait RefCellDeref<'a> {
+trait CafeCellDeref<'a> {
     fn resolve(
         &self,
         cp_index: usize,
@@ -57,7 +59,7 @@ trait RefCellDeref<'a> {
     fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<(), ParseError>;
 }
 
-impl<'a> RefCellDeref<'a> for RefCell<ConstantPoolRef<'a>> {
+impl<'a> CafeCellDeref<'a> for CafeCell<ConstantPoolRef<'a>> {
     fn resolve(
         &self,
         cp_index: usize,
@@ -124,18 +126,18 @@ pub(crate) enum ConstantPoolEntry<'a> {
     Float(f32),
     Long(i64),
     Double(f64),
-    ClassInfo(RefCell<ConstantPoolRef<'a>>),
-    String(RefCell<ConstantPoolRef<'a>>),
-    FieldRef(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
-    MethodRef(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
-    InterfaceMethodRef(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
-    NameAndType(RefCell<ConstantPoolRef<'a>>, RefCell<ConstantPoolRef<'a>>),
-    MethodHandle(ReferenceKind, RefCell<ConstantPoolRef<'a>>),
-    MethodType(RefCell<ConstantPoolRef<'a>>),
-    Dynamic(BootstrapMethodRef, RefCell<ConstantPoolRef<'a>>),
-    InvokeDynamic(BootstrapMethodRef, RefCell<ConstantPoolRef<'a>>),
-    ModuleInfo(RefCell<ConstantPoolRef<'a>>),
-    PackageInfo(RefCell<ConstantPoolRef<'a>>),
+    ClassInfo(CafeCell<ConstantPoolRef<'a>>),
+    String(CafeCell<ConstantPoolRef<'a>>),
+    FieldRef(CafeCell<ConstantPoolRef<'a>>, CafeCell<ConstantPoolRef<'a>>),
+    MethodRef(CafeCell<ConstantPoolRef<'a>>, CafeCell<ConstantPoolRef<'a>>),
+    InterfaceMethodRef(CafeCell<ConstantPoolRef<'a>>, CafeCell<ConstantPoolRef<'a>>),
+    NameAndType(CafeCell<ConstantPoolRef<'a>>, CafeCell<ConstantPoolRef<'a>>),
+    MethodHandle(ReferenceKind, CafeCell<ConstantPoolRef<'a>>),
+    MethodType(CafeCell<ConstantPoolRef<'a>>),
+    Dynamic(BootstrapMethodRef, CafeCell<ConstantPoolRef<'a>>),
+    InvokeDynamic(BootstrapMethodRef, CafeCell<ConstantPoolRef<'a>>),
+    ModuleInfo(CafeCell<ConstantPoolRef<'a>>),
+    PackageInfo(CafeCell<ConstantPoolRef<'a>>),
     Unused,
 }
 
@@ -403,8 +405,8 @@ impl<'a> ConstantPoolEntry<'a> {
 fn read_unresolved_cp_ref<'a>(
     bytes: &'a [u8],
     ix: &mut usize,
-) -> Result<RefCell<ConstantPoolRef<'a>>, ParseError> {
-    Ok(RefCell::new(ConstantPoolRef::Unresolved(read_u2(
+) -> Result<CafeCell<ConstantPoolRef<'a>>, ParseError> {
+    Ok(CafeCell::new(ConstantPoolRef::Unresolved(read_u2(
         bytes, ix,
     )?)))
 }
@@ -967,7 +969,7 @@ pub struct MethodHandle<'a> {
 
 fn make_method_handle<'a>(
     x: &ReferenceKind,
-    y: &RefCell<ConstantPoolRef<'a>>,
+    y: &CafeCell<ConstantPoolRef<'a>>,
 ) -> Result<MethodHandle<'a>, ParseError> {
     let (class_name, member_kind, member_ref) = match y.borrow().get().deref() {
         ConstantPoolEntry::FieldRef(c, m) => (

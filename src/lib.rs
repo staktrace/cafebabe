@@ -18,7 +18,11 @@ pub mod names;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ops::Deref;
+
+#[cfg(not(feature = "threadsafe"))]
 use std::rc::Rc;
+#[cfg(feature = "threadsafe")]
+use std::sync::Arc;
 
 use crate::attributes::{read_attributes, AttributeData, AttributeInfo};
 use crate::constant_pool::{
@@ -29,7 +33,10 @@ use crate::descriptor::{FieldType, MethodDescriptor, ReturnDescriptor};
 pub use crate::error::ParseError;
 use crate::names::{is_unqualified_method_name, is_unqualified_name};
 
+#[cfg(not(feature = "threadsafe"))]
 pub(crate) type CafeRc<T> = Rc<T>;
+#[cfg(feature = "threadsafe")]
+pub(crate) type CafeRc<T> = Arc<T>;
 
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     if bytes.len() < *ix + 1 {

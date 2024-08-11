@@ -1,6 +1,11 @@
 use std::borrow::Cow;
+#[cfg(not(feature = "threadsafe"))]
 use std::cell::RefCell;
 use std::ops::Deref;
+#[cfg(feature = "threadsafe")]
+use std::ops::DerefMut;
+#[cfg(feature = "threadsafe")]
+use std::sync::Mutex;
 
 use crate::names::{
     is_array_descriptor, is_binary_name, is_field_descriptor, is_method_descriptor, is_module_name,
@@ -8,7 +13,10 @@ use crate::names::{
 };
 use crate::{read_u1, read_u2, read_u4, read_u8, CafeRc, ParseError};
 
+#[cfg(not(feature = "threadsafe"))]
 type CafeCell<T> = RefCell<T>;
+#[cfg(feature = "threadsafe")]
+type CafeCell<T> = Mutex<T>;
 
 #[derive(Debug)]
 pub(crate) enum ConstantPoolRef<'a> {
@@ -50,9 +58,17 @@ impl<'a> ConstantPoolRef<'a> {
     }
 }
 
+#[cfg(not(feature = "threadsafe"))]
 macro_rules! peel {
     ($x:expr) => {
         $x.borrow().get()
+    };
+}
+
+#[cfg(feature = "threadsafe")]
+macro_rules! peel {
+    ($x:expr) => {
+        $x.lock().unwrap().deref().get()
     };
 }
 
@@ -71,7 +87,10 @@ impl<'a> CafeCellDeref<'a> for CafeCell<ConstantPoolRef<'a>> {
         cp_index: usize,
         pool: &[CafeRc<ConstantPoolEntry<'a>>],
     ) -> Result<(), ParseError> {
-        self.borrow_mut().resolve(cp_index, pool)
+        #[cfg(not(feature = "threadsafe"))]
+        return self.borrow_mut().resolve(cp_index, pool);
+        #[cfg(feature = "threadsafe")]
+        return self.lock().unwrap().deref_mut().resolve(cp_index, pool);
     }
 
     fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<(), ParseError> {

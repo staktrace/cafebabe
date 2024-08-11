@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -11,16 +12,15 @@ fn main() {
         class_data.push(bytes);
     }
 
-    let results = {
-        let mut parsed = Vec::with_capacity(class_data.len());
-        for data in &class_data {
-            parsed.push(cafebabe::parse_class_with_options(
+    let results: Vec<Result<_, _>> = class_data
+        .par_iter()
+        .map(|data| {
+            cafebabe::parse_class_with_options(
                 &data,
                 cafebabe::ParseOptions::default().parse_bytecode(true),
-            ));
-        }
-        parsed
-    };
+            )
+        })
+        .collect();
 
     for result in results {
         match result {

@@ -29,6 +29,8 @@ use crate::descriptor::{FieldType, MethodDescriptor, ReturnDescriptor};
 pub use crate::error::ParseError;
 use crate::names::{is_unqualified_method_name, is_unqualified_name};
 
+pub(crate) type CafeRc<T> = Rc<T>;
+
 pub(crate) fn read_u1(bytes: &[u8], ix: &mut usize) -> Result<u8, ParseError> {
     if bytes.len() < *ix + 1 {
         fail!("Unexpected end of stream reading u1 at index {}", *ix);
@@ -81,7 +83,7 @@ pub(crate) fn read_u8(bytes: &[u8], ix: &mut usize) -> Result<u64, ParseError> {
 fn read_interfaces<'a>(
     bytes: &'a [u8],
     ix: &mut usize,
-    pool: &[Rc<ConstantPoolEntry<'a>>],
+    pool: &[CafeRc<ConstantPoolEntry<'a>>],
 ) -> Result<Vec<Cow<'a, str>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut interfaces = Vec::with_capacity(count.into());
@@ -145,7 +147,7 @@ pub struct FieldInfo<'a> {
 fn read_fields<'a>(
     bytes: &'a [u8],
     ix: &mut usize,
-    pool: &[Rc<ConstantPoolEntry<'a>>],
+    pool: &[CafeRc<ConstantPoolEntry<'a>>],
     opts: &ParseOptions,
 ) -> Result<Vec<FieldInfo<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
@@ -209,7 +211,7 @@ pub struct MethodInfo<'a> {
 fn read_methods<'a>(
     bytes: &'a [u8],
     ix: &mut usize,
-    pool: &[Rc<ConstantPoolEntry<'a>>],
+    pool: &[CafeRc<ConstantPoolEntry<'a>>],
     opts: &ParseOptions,
     in_interface: bool,
     major_version: u16,
@@ -274,7 +276,7 @@ bitflags! {
 }
 
 fn validate_bootstrap_methods<'a>(
-    pool: &[Rc<ConstantPoolEntry<'a>>],
+    pool: &[CafeRc<ConstantPoolEntry<'a>>],
     attributes: &[AttributeInfo<'a>],
 ) -> Result<(), ParseError> {
     for cp_entry in pool {
@@ -306,7 +308,7 @@ fn validate_bootstrap_methods<'a>(
 pub struct ClassFile<'a> {
     pub major_version: u16,
     pub minor_version: u16,
-    constant_pool: Vec<Rc<ConstantPoolEntry<'a>>>,
+    constant_pool: Vec<CafeRc<ConstantPoolEntry<'a>>>,
     pub access_flags: ClassAccessFlags,
     pub this_class: Cow<'a, str>,
     pub super_class: Option<Cow<'a, str>>,

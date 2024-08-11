@@ -50,6 +50,12 @@ impl<'a> ConstantPoolRef<'a> {
     }
 }
 
+macro_rules! peel {
+    ($x:expr) => {
+        $x.borrow().get()
+    };
+}
+
 trait CafeCellDeref<'a> {
     fn resolve(
         &self,
@@ -69,7 +75,7 @@ impl<'a> CafeCellDeref<'a> for CafeCell<ConstantPoolRef<'a>> {
     }
 
     fn ensure_type(&self, allowed: ConstantPoolEntryTypes) -> Result<(), ParseError> {
-        self.borrow().get().ensure_type(allowed)
+        peel!(self).ensure_type(allowed)
     }
 }
 
@@ -211,27 +217,27 @@ impl<'a> ConstantPoolEntry<'a> {
         match self {
             ConstantPoolEntry::ClassInfo(x) => {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
-                x.borrow().get().validate_classinfo_name()
+                peel!(x).validate_classinfo_name()
             }
             ConstantPoolEntry::String(x) => x.ensure_type(ConstantPoolEntryTypes::UTF8),
             ConstantPoolEntry::FieldRef(x, y) => {
                 x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)?;
                 y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
-                y.borrow().get().validate_field_descriptor()
+                peel!(y).validate_field_descriptor()
             }
             ConstantPoolEntry::MethodRef(x, y) => {
                 x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)?;
                 y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
-                y.borrow().get().validate_method_descriptor()
+                peel!(y).validate_method_descriptor()
             }
             ConstantPoolEntry::InterfaceMethodRef(x, y) => {
                 x.ensure_type(ConstantPoolEntryTypes::CLASS_INFO)?;
                 y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
-                y.borrow().get().validate_method_descriptor()
+                peel!(y).validate_method_descriptor()
             }
             ConstantPoolEntry::NameAndType(x, y) => {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
-                x.borrow().get().validate_unqualified_name()?;
+                peel!(x).validate_unqualified_name()?;
                 y.ensure_type(ConstantPoolEntryTypes::UTF8)
                 // y is validated as part of FieldRef/MethodRef/InterfaceMethodRef/Dynamic/InvokeDynamic pool item validation
             }
@@ -254,23 +260,23 @@ impl<'a> ConstantPoolEntry<'a> {
             }),
             ConstantPoolEntry::MethodType(x) => {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
-                x.borrow().get().validate_method_descriptor()
+                peel!(x).validate_method_descriptor()
             }
             ConstantPoolEntry::Dynamic(_, y) => {
                 y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
-                y.borrow().get().validate_field_descriptor()
+                peel!(y).validate_field_descriptor()
             }
             ConstantPoolEntry::InvokeDynamic(_, y) => {
                 y.ensure_type(ConstantPoolEntryTypes::NAME_AND_TYPE)?;
-                y.borrow().get().validate_method_descriptor()
+                peel!(y).validate_method_descriptor()
             }
             ConstantPoolEntry::ModuleInfo(x) => {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
-                x.borrow().get().validate_module_name()
+                peel!(x).validate_module_name()
             }
             ConstantPoolEntry::PackageInfo(x) => {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
-                x.borrow().get().validate_binary_name()
+                peel!(x).validate_binary_name()
             }
 
             // Entry types that do not reference other entries:
@@ -344,7 +350,7 @@ impl<'a> ConstantPoolEntry<'a> {
     fn validate_field_descriptor(&self) -> Result<(), ParseError> {
         match self {
             ConstantPoolEntry::NameAndType(_, y) => {
-                if is_field_descriptor(y.borrow().get().str()?) {
+                if is_field_descriptor(peel!(y).str()?) {
                     Ok(())
                 } else {
                     fail!("Invalid field descriptor")
@@ -356,7 +362,7 @@ impl<'a> ConstantPoolEntry<'a> {
 
     fn validate_method_descriptor(&self) -> Result<(), ParseError> {
         match self {
-            ConstantPoolEntry::NameAndType(_, y) => y.borrow().get().validate_method_descriptor(),
+            ConstantPoolEntry::NameAndType(_, y) => peel!(y).validate_method_descriptor(),
             _ => {
                 if is_method_descriptor(self.str()?) {
                     Ok(())
@@ -384,7 +390,7 @@ impl<'a> ConstantPoolEntry<'a> {
 
     fn classinfo(&self) -> Cow<'a, str> {
         match self {
-            ConstantPoolEntry::ClassInfo(x) => x.borrow().get().utf8(),
+            ConstantPoolEntry::ClassInfo(x) => peel!(x).utf8(),
             _ => panic!("Attempting to get classinfo data from non-classinfo constant pool entry!"),
         }
     }
@@ -392,8 +398,8 @@ impl<'a> ConstantPoolEntry<'a> {
     fn name_and_type(&self) -> NameAndType<'a> {
         match self {
             ConstantPoolEntry::NameAndType(x, y) => NameAndType {
-                name: x.borrow().get().utf8(),
-                descriptor: y.borrow().get().utf8(),
+                name: peel!(x).utf8(),
+                descriptor: peel!(y).utf8(),
             },
             _ => panic!(
                 "Attempting to get name and type data from non-name-and-type constant pool entry!"
@@ -718,7 +724,7 @@ pub(crate) fn read_cp_classinfo<'a>(
 ) -> Result<Cow<'a, str>, ParseError> {
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
-        ConstantPoolEntry::ClassInfo(x) => Ok(x.borrow().get().utf8()),
+        ConstantPoolEntry::ClassInfo(x) => Ok(peel!(x).utf8()),
         _ => fail!("Unexpected constant pool reference type"),
     }
 }
@@ -731,7 +737,7 @@ pub(crate) fn read_cp_classinfo_opt<'a>(
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
-        ConstantPoolEntry::ClassInfo(x) => Ok(Some(x.borrow().get().utf8())),
+        ConstantPoolEntry::ClassInfo(x) => Ok(Some(peel!(x).utf8())),
         _ => fail!("Unexpected constant pool reference type"),
     }
 }
@@ -743,7 +749,7 @@ pub(crate) fn read_cp_moduleinfo<'a>(
 ) -> Result<Cow<'a, str>, ParseError> {
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
-        ConstantPoolEntry::ModuleInfo(x) => Ok(x.borrow().get().utf8()),
+        ConstantPoolEntry::ModuleInfo(x) => Ok(peel!(x).utf8()),
         _ => fail!("Unexpected constant pool reference type"),
     }
 }
@@ -755,7 +761,7 @@ pub(crate) fn read_cp_packageinfo<'a>(
 ) -> Result<Cow<'a, str>, ParseError> {
     let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
     match cp_ref.deref() {
-        ConstantPoolEntry::PackageInfo(x) => Ok(x.borrow().get().utf8()),
+        ConstantPoolEntry::PackageInfo(x) => Ok(peel!(x).utf8()),
         _ => fail!("Unexpected constant pool reference type"),
     }
 }
@@ -775,8 +781,8 @@ pub(crate) fn read_cp_nameandtype_opt<'a>(
     match cp_ref.deref() {
         ConstantPoolEntry::Zero => Ok(None),
         ConstantPoolEntry::NameAndType(x, y) => Ok(Some(NameAndType {
-            name: x.borrow().get().utf8(),
-            descriptor: y.borrow().get().utf8(),
+            name: peel!(x).utf8(),
+            descriptor: peel!(y).utf8(),
         })),
         _ => fail!("Unexpected constant pool reference type"),
     }
@@ -803,7 +809,7 @@ pub(crate) fn read_cp_literalconstant<'a>(
         ConstantPoolEntry::Float(v) => Ok(LiteralConstant::Float(*v)),
         ConstantPoolEntry::Long(v) => Ok(LiteralConstant::Long(*v)),
         ConstantPoolEntry::Double(v) => Ok(LiteralConstant::Double(*v)),
-        ConstantPoolEntry::String(v) => Ok(v.borrow().get().string_literal()),
+        ConstantPoolEntry::String(v) => Ok(peel!(v).string_literal()),
         _ => fail!("Unexpected constant pool reference type"),
     }
 }
@@ -876,8 +882,8 @@ pub(crate) fn read_cp_memberref<'a>(
         ConstantPoolEntry::FieldRef(c, m)
         | ConstantPoolEntry::MethodRef(c, m)
         | ConstantPoolEntry::InterfaceMethodRef(c, m) => Ok(MemberRef {
-            class_name: c.borrow().get().classinfo(),
-            name_and_type: m.borrow().get().name_and_type(),
+            class_name: peel!(c).classinfo(),
+            name_and_type: peel!(m).name_and_type(),
         }),
         _ => fail!("Unexpected constant pool reference type"),
     }
@@ -898,7 +904,7 @@ pub(crate) fn read_cp_invokedynamic<'a>(
     match cp_ref.deref() {
         ConstantPoolEntry::InvokeDynamic(x, y) => Ok(InvokeDynamic {
             attr_index: *x,
-            name_and_type: y.borrow().get().name_and_type(),
+            name_and_type: peel!(y).name_and_type(),
         }),
         _ => fail!("Unexpected constant pool reference type"),
     }
@@ -936,17 +942,15 @@ pub(crate) fn get_cp_loadable<'a>(
         ConstantPoolEntry::Float(v) => Ok(Loadable::LiteralConstant(LiteralConstant::Float(*v))),
         ConstantPoolEntry::Long(v) => Ok(Loadable::LiteralConstant(LiteralConstant::Long(*v))),
         ConstantPoolEntry::Double(v) => Ok(Loadable::LiteralConstant(LiteralConstant::Double(*v))),
-        ConstantPoolEntry::String(v) => {
-            Ok(Loadable::LiteralConstant(v.borrow().get().string_literal()))
-        }
-        ConstantPoolEntry::ClassInfo(x) => Ok(Loadable::ClassInfo(x.borrow().get().utf8())),
+        ConstantPoolEntry::String(v) => Ok(Loadable::LiteralConstant(peel!(v).string_literal())),
+        ConstantPoolEntry::ClassInfo(x) => Ok(Loadable::ClassInfo(peel!(x).utf8())),
         ConstantPoolEntry::MethodHandle(x, y) => {
             Ok(Loadable::MethodHandle(make_method_handle(x, y)?))
         }
-        ConstantPoolEntry::MethodType(x) => Ok(Loadable::MethodType(x.borrow().get().utf8())),
+        ConstantPoolEntry::MethodType(x) => Ok(Loadable::MethodType(peel!(x).utf8())),
         ConstantPoolEntry::Dynamic(x, y) => Ok(Loadable::Dynamic(Dynamic {
             attr_index: *x,
-            name_and_type: y.borrow().get().name_and_type(),
+            name_and_type: peel!(y).name_and_type(),
         })),
         _ => fail!("Unexpected non-loadable constant pool reference found"),
     }
@@ -971,21 +975,21 @@ fn make_method_handle<'a>(
     x: &ReferenceKind,
     y: &CafeCell<ConstantPoolRef<'a>>,
 ) -> Result<MethodHandle<'a>, ParseError> {
-    let (class_name, member_kind, member_ref) = match y.borrow().get().deref() {
+    let (class_name, member_kind, member_ref) = match peel!(y).deref() {
         ConstantPoolEntry::FieldRef(c, m) => (
-            c.borrow().get().classinfo(),
+            peel!(c).classinfo(),
             MemberKind::Field,
-            m.borrow().get().name_and_type(),
+            peel!(m).name_and_type(),
         ),
         ConstantPoolEntry::MethodRef(c, m) => (
-            c.borrow().get().classinfo(),
+            peel!(c).classinfo(),
             MemberKind::Method,
-            m.borrow().get().name_and_type(),
+            peel!(m).name_and_type(),
         ),
         ConstantPoolEntry::InterfaceMethodRef(c, m) => (
-            c.borrow().get().classinfo(),
+            peel!(c).classinfo(),
             MemberKind::InterfaceMethod,
-            m.borrow().get().name_and_type(),
+            peel!(m).name_and_type(),
         ),
         _ => fail!("Unexpected constant pool reference type"),
     };
@@ -1037,17 +1041,13 @@ pub(crate) fn read_cp_bootstrap_argument<'a>(
             LiteralConstant::Double(*v),
         )),
         ConstantPoolEntry::String(v) => Ok(BootstrapArgument::LiteralConstant(
-            v.borrow().get().string_literal(),
+            peel!(v).string_literal(),
         )),
-        ConstantPoolEntry::ClassInfo(x) => {
-            Ok(BootstrapArgument::ClassInfo(x.borrow().get().utf8()))
-        }
+        ConstantPoolEntry::ClassInfo(x) => Ok(BootstrapArgument::ClassInfo(peel!(x).utf8())),
         ConstantPoolEntry::MethodHandle(x, y) => {
             Ok(BootstrapArgument::MethodHandle(make_method_handle(x, y)?))
         }
-        ConstantPoolEntry::MethodType(x) => {
-            Ok(BootstrapArgument::MethodType(x.borrow().get().utf8()))
-        }
+        ConstantPoolEntry::MethodType(x) => Ok(BootstrapArgument::MethodType(peel!(x).utf8())),
         _ => fail!("Unexpected constant pool reference type"),
     }
 }
@@ -1103,54 +1103,46 @@ impl<'a> Iterator for ConstantPoolIter<'a> {
                 ConstantPoolEntry::Double(v) => {
                     ConstantPoolItem::LiteralConstant(LiteralConstant::Double(*v))
                 }
-                ConstantPoolEntry::ClassInfo(x) => {
-                    ConstantPoolItem::ClassInfo(x.borrow().get().utf8())
-                }
+                ConstantPoolEntry::ClassInfo(x) => ConstantPoolItem::ClassInfo(peel!(x).utf8()),
                 ConstantPoolEntry::String(x) => {
-                    ConstantPoolItem::LiteralConstant(x.borrow().get().string_literal())
+                    ConstantPoolItem::LiteralConstant(peel!(x).string_literal())
                 }
                 ConstantPoolEntry::FieldRef(c, m) => ConstantPoolItem::FieldRef(MemberRef {
-                    class_name: c.borrow().get().classinfo(),
-                    name_and_type: m.borrow().get().name_and_type(),
+                    class_name: peel!(c).classinfo(),
+                    name_and_type: peel!(m).name_and_type(),
                 }),
                 ConstantPoolEntry::MethodRef(c, m) => ConstantPoolItem::MethodRef(MemberRef {
-                    class_name: c.borrow().get().classinfo(),
-                    name_and_type: m.borrow().get().name_and_type(),
+                    class_name: peel!(c).classinfo(),
+                    name_and_type: peel!(m).name_and_type(),
                 }),
                 ConstantPoolEntry::InterfaceMethodRef(c, m) => {
                     ConstantPoolItem::InterfaceMethodRef(MemberRef {
-                        class_name: c.borrow().get().classinfo(),
-                        name_and_type: m.borrow().get().name_and_type(),
+                        class_name: peel!(c).classinfo(),
+                        name_and_type: peel!(m).name_and_type(),
                     })
                 }
                 ConstantPoolEntry::NameAndType(x, y) => {
                     ConstantPoolItem::NameAndType(NameAndType {
-                        name: x.borrow().get().utf8(),
-                        descriptor: y.borrow().get().utf8(),
+                        name: peel!(x).utf8(),
+                        descriptor: peel!(y).utf8(),
                     })
                 }
                 ConstantPoolEntry::MethodHandle(x, y) => {
                     ConstantPoolItem::MethodHandle(make_method_handle(x, y).unwrap())
                 }
-                ConstantPoolEntry::MethodType(x) => {
-                    ConstantPoolItem::MethodType(x.borrow().get().utf8())
-                }
+                ConstantPoolEntry::MethodType(x) => ConstantPoolItem::MethodType(peel!(x).utf8()),
                 ConstantPoolEntry::Dynamic(x, y) => ConstantPoolItem::Dynamic(Dynamic {
                     attr_index: *x,
-                    name_and_type: y.borrow().get().name_and_type(),
+                    name_and_type: peel!(y).name_and_type(),
                 }),
                 ConstantPoolEntry::InvokeDynamic(x, y) => {
                     ConstantPoolItem::InvokeDynamic(InvokeDynamic {
                         attr_index: *x,
-                        name_and_type: y.borrow().get().name_and_type(),
+                        name_and_type: peel!(y).name_and_type(),
                     })
                 }
-                ConstantPoolEntry::ModuleInfo(x) => {
-                    ConstantPoolItem::ModuleInfo(x.borrow().get().utf8())
-                }
-                ConstantPoolEntry::PackageInfo(x) => {
-                    ConstantPoolItem::PackageInfo(x.borrow().get().utf8())
-                }
+                ConstantPoolEntry::ModuleInfo(x) => ConstantPoolItem::ModuleInfo(peel!(x).utf8()),
+                ConstantPoolEntry::PackageInfo(x) => ConstantPoolItem::PackageInfo(peel!(x).utf8()),
                 ConstantPoolEntry::Unused => continue,
             };
             return Some(item);

@@ -32,10 +32,10 @@ macro_rules! assert_validate_fails {
     };
 }
 
-// Helper for creating the smart pointer types (RefCell, ConstantPoolRef,
+// Helper for creating the smart pointer types (CafeCell, ConstantPoolRef,
 // CafeRc) required to nest ConstantPoolEntry instances.
-fn wrap(entry: ConstantPoolEntry) -> RefCell<ConstantPoolRef> {
-    RefCell::new(ConstantPoolRef::Resolved(CafeRc::new(entry)))
+fn wrap(entry: ConstantPoolEntry) -> CafeCell<ConstantPoolRef> {
+    CafeCell::new(ConstantPoolRef::Resolved(CafeRc::new(entry)))
 }
 
 #[test]

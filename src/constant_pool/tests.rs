@@ -32,10 +32,10 @@ macro_rules! assert_validate_fails {
     };
 }
 
-// Helper for creating the smart pointer types (RefCell, ConstantPoolRef,
-// Rc) required to nest ConstantPoolEntry instances.
-fn wrap(entry: ConstantPoolEntry) -> RefCell<ConstantPoolRef> {
-    RefCell::new(ConstantPoolRef::Resolved(Rc::new(entry)))
+// Helper for creating the smart pointer types (CafeCell, ConstantPoolRef,
+// CafeRc) required to nest ConstantPoolEntry instances.
+fn wrap(entry: ConstantPoolEntry) -> CafeCell<ConstantPoolRef> {
+    CafeCell::new(ConstantPoolRef::Resolved(CafeRc::new(entry)))
 }
 
 #[test]
@@ -55,7 +55,10 @@ fn test_validate_class_info() {
     assert_validate_passes!(ClassInfo(wrap(Utf8(Cow::from("some/package/Class")))));
     assert_validate_passes!(ClassInfo(wrap(Utf8(Cow::from("[Lsome/package/Class;")))));
 
-    assert_validate_fails!(ClassInfo(wrap(Utf8(Cow::from("")))), "Invalid binary name");
+    assert_validate_fails!(
+        ClassInfo(wrap(Utf8(Cow::from("")))),
+        "Invalid classinfo name"
+    );
     assert_validate_fails!(
         ClassInfo(wrap(Utf8Bytes(&[]))),
         "Attempting to get utf-8 data from non-utf8 constant pool entry!"

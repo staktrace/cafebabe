@@ -1,6 +1,6 @@
 [package]
 name = "cafebabe"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Kartikaya Gupta"]
 edition = "2018"
 license = "0BSD"
@@ -16,6 +16,18 @@ exclude = [".gitignore", ".github/**", "examples/**", "tests/**"]
 [badges]
 maintenance = { status = "passively-maintained" }
 
+[features]
+default = []
+threadsafe = []
+
 [dependencies]
 bitflags = "1.0"
 cesu8 = "1.1.0"
+
+[dev-dependencies]
+rayon = "1.10.0"
+
+[[example]]
+name = "threadsafe"
+path = "examples/threadsafe.rs"
+required-features = ["threadsafe"]

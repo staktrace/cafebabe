@@ -318,7 +318,7 @@ impl<'a> ConstantPoolEntry<'a> {
         }
     }
 
-    /// Returns &str if self if Utf8. Returns parse error otherwise.
+    /// Returns &str if self is Utf8. Returns parse error otherwise.
     /// The parse error will have a special message if self is Utf8Bytes
     /// because such an odd case might be difficult to debug otherwise.
     fn str(&self) -> Result<&str, ParseError> {

@@ -1,11 +1,10 @@
-use std::borrow::Cow;
 use std::convert::TryFrom;
 
 use crate::constant_pool::{
-    get_cp_loadable, read_cp_classinfo, read_cp_invokedynamic, read_cp_memberref,
+    get_cp_loadable, read_cp_invokedynamic, read_cp_memberref, read_cp_object_array_type,
 };
 use crate::constant_pool::{
-    ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef,
+    ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef, ObjectArrayType,
 };
 use crate::{read_u1, read_u2, read_u4, CafeRc, ParseError};
 
@@ -43,7 +42,7 @@ pub enum Opcode<'a> {
     Aastore,
     AconstNull,
     Aload(u16), // both wide and narrow
-    Anewarray(Cow<'a, str>),
+    Anewarray(ObjectArrayType<'a>),
     Areturn,
     Arraylength,
     Astore(u16), // both wide and narrow
@@ -54,7 +53,7 @@ pub enum Opcode<'a> {
     Breakpoint,
     Caload,
     Castore,
-    Checkcast(Cow<'a, str>),
+    Checkcast(ObjectArrayType<'a>),
     D2f,
     D2i,
     D2l,
@@ -141,7 +140,7 @@ pub enum Opcode<'a> {
     Impdep2,
     Imul,
     Ineg,
-    Instanceof(Cow<'a, str>),
+    Instanceof(ObjectArrayType<'a>),
     Invokedynamic(InvokeDynamic<'a>),
     Invokeinterface(MemberRef<'a>, u8),
     Invokespecial(MemberRef<'a>),
@@ -186,8 +185,8 @@ pub enum Opcode<'a> {
     Lxor,
     Monitorenter,
     Monitorexit,
-    Multianewarray(Cow<'a, str>, u8),
-    New(Cow<'a, str>),
+    Multianewarray(ObjectArrayType<'a>, u8),
+    New(ObjectArrayType<'a>),
     Newarray(PrimitiveArrayType),
     Nop,
     Pop,
@@ -614,7 +613,15 @@ fn read_opcodes<'a>(
                 }
                 Opcode::Invokedynamic(invokedynamic)
             }
-            0xbb => Opcode::New(read_cp_classinfo(code, &mut ix, pool)?),
+            0xbb => {
+                let object_array_type = match read_cp_object_array_type(code, &mut ix, pool)? {
+                    ObjectArrayType::ArrayType(_) => {
+                        fail!("Array types not allowed for new opcode at index {}", ix - 2)
+                    }
+                    ObjectArrayType::BinaryName(name) => ObjectArrayType::BinaryName(name),
+                };
+                Opcode::New(object_array_type)
+            }
             0xbc => {
                 let primitive_type = match read_u1(code, &mut ix)? {
                     4 => PrimitiveArrayType::Boolean,
@@ -632,11 +639,11 @@ fn read_opcodes<'a>(
                 };
                 Opcode::Newarray(primitive_type)
             }
-            0xbd => Opcode::Anewarray(read_cp_classinfo(code, &mut ix, pool)?),
+            0xbd => Opcode::Anewarray(read_cp_object_array_type(code, &mut ix, pool)?),
             0xbe => Opcode::Arraylength,
             0xbf => Opcode::Athrow,
-            0xc0 => Opcode::Checkcast(read_cp_classinfo(code, &mut ix, pool)?),
-            0xc1 => Opcode::Instanceof(read_cp_classinfo(code, &mut ix, pool)?),
+            0xc0 => Opcode::Checkcast(read_cp_object_array_type(code, &mut ix, pool)?),
+            0xc1 => Opcode::Instanceof(read_cp_object_array_type(code, &mut ix, pool)?),
             0xc2 => Opcode::Monitorenter,
             0xc3 => Opcode::Monitorexit,
             0xc4 => {
@@ -662,7 +669,7 @@ fn read_opcodes<'a>(
                 }
             }
             0xc5 => Opcode::Multianewarray(
-                read_cp_classinfo(code, &mut ix, pool)?,
+                read_cp_object_array_type(code, &mut ix, pool)?,
                 read_u1(code, &mut ix)?,
             ),
             0xc6 => Opcode::Ifnull((read_u2(code, &mut ix)? as i16).into()),

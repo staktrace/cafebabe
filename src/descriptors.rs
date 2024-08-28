@@ -214,6 +214,19 @@ pub(crate) fn parse_method_descriptor<'a>(
     })
 }
 
+pub(crate) fn parse_array_descriptor<'a>(
+    data: &Cow<'a, str>,
+) -> Result<Option<FieldDescriptor<'a>>, ParseError> {
+    if data.len() == 0 || data.as_bytes()[0] != b'[' {
+        return Ok(None);
+    }
+    let desc = parse_field_descriptor(data, 0)?;
+    if data.len() != desc.byte_len() {
+        fail!("Not a field descriptor")
+    }
+    Ok(Some(desc))
+}
+
 pub(crate) fn is_field_descriptor(name: &str) -> bool {
     match parse_field_descriptor(&Cow::Borrowed(name), 0) {
         Ok(desc) => name.len() == desc.byte_len(),

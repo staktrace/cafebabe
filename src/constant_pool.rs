@@ -7,7 +7,10 @@ use std::ops::DerefMut;
 #[cfg(feature = "threadsafe")]
 use std::sync::Mutex;
 
-use crate::descriptors::{is_array_descriptor, is_field_descriptor, is_method_descriptor};
+use crate::descriptors::FieldDescriptor;
+use crate::descriptors::{
+    is_array_descriptor, is_field_descriptor, is_method_descriptor, parse_array_descriptor,
+};
 use crate::names::{
     is_binary_name, is_module_name, is_unqualified_method_name, is_unqualified_name,
 };
@@ -1067,6 +1070,30 @@ pub(crate) fn read_cp_bootstrap_argument<'a>(
             Ok(BootstrapArgument::MethodHandle(make_method_handle(x, y)?))
         }
         ConstantPoolEntry::MethodType(x) => Ok(BootstrapArgument::MethodType(peel!(x).utf8())),
+        _ => fail!("Unexpected constant pool reference type"),
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ObjectArrayType<'a> {
+    ArrayType(FieldDescriptor<'a>),
+    BinaryName(Cow<'a, str>),
+}
+
+pub(crate) fn read_cp_object_array_type<'a>(
+    bytes: &'a [u8],
+    ix: &mut usize,
+    pool: &[CafeRc<ConstantPoolEntry<'a>>],
+) -> Result<ObjectArrayType<'a>, ParseError> {
+    let cp_ref = read_cp_ref_any(bytes, ix, pool)?;
+    match cp_ref.deref() {
+        ConstantPoolEntry::ClassInfo(x) => {
+            let name = peel!(x).utf8();
+            match parse_array_descriptor(&name)? {
+                Some(desc) => Ok(ObjectArrayType::ArrayType(desc)),
+                None => Ok(ObjectArrayType::BinaryName(name)),
+            }
+        }
         _ => fail!("Unexpected constant pool reference type"),
     }
 }

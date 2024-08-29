@@ -1,7 +1,9 @@
+use std::borrow::Cow;
 use std::convert::TryFrom;
 
 use crate::constant_pool::{
-    get_cp_loadable, read_cp_invokedynamic, read_cp_memberref, read_cp_object_array_type,
+    get_cp_loadable, read_cp_classinfo, read_cp_invokedynamic, read_cp_memberref,
+    read_cp_object_array_type,
 };
 use crate::constant_pool::{
     ConstantPoolEntry, ConstantPoolEntryTypes, InvokeDynamic, Loadable, MemberRef, ObjectArrayType,
@@ -186,7 +188,7 @@ pub enum Opcode<'a> {
     Monitorenter,
     Monitorexit,
     Multianewarray(ObjectArrayType<'a>, u8),
-    New(ObjectArrayType<'a>),
+    New(Cow<'a, str>),
     Newarray(PrimitiveArrayType),
     Nop,
     Pop,
@@ -613,15 +615,7 @@ fn read_opcodes<'a>(
                 }
                 Opcode::Invokedynamic(invokedynamic)
             }
-            0xbb => {
-                let object_array_type = match read_cp_object_array_type(code, &mut ix, pool)? {
-                    ObjectArrayType::ArrayType(_) => {
-                        fail!("Array types not allowed for new opcode at index {}", ix - 2)
-                    }
-                    ObjectArrayType::BinaryName(name) => ObjectArrayType::BinaryName(name),
-                };
-                Opcode::New(object_array_type)
-            }
+            0xbb => Opcode::New(read_cp_classinfo(code, &mut ix, pool)?),
             0xbc => {
                 let primitive_type = match read_u1(code, &mut ix)? {
                     4 => PrimitiveArrayType::Boolean,

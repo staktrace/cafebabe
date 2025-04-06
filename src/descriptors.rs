@@ -3,7 +3,6 @@ use std::{
     fmt::{self, Write},
 };
 
-
 use crate::ParseError;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -55,7 +54,7 @@ impl<'a> ClassName<'a> {
 }
 impl<'a> fmt::Display for ClassName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let segments : Vec<Cow<'a, str>> = self.segments.iter().map(|s| s.name.clone()).collect();
+        let segments: Vec<Cow<'a, str>> = self.segments.iter().map(|s| s.name.clone()).collect();
         write!(f, "{}", segments.join("/"))
     }
 }
@@ -106,17 +105,17 @@ impl<'a> FieldType<'a> {
     }
 }
 
-impl<'a> fmt::Display for FieldType<'a> {
+impl fmt::Display for FieldType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            Self::Byte     => write!(f, "B"),
-            Self::Char     => write!(f, "C"),
-            Self::Double   => write!(f, "D"),
-            Self::Float    => write!(f, "F"),
-            Self::Integer  => write!(f, "I"),
-            Self::Long     => write!(f, "J"),
-            Self::Short    => write!(f, "S"),
-            Self::Boolean  => write!(f, "Z"),
+            Self::Byte => write!(f, "B"),
+            Self::Char => write!(f, "C"),
+            Self::Double => write!(f, "D"),
+            Self::Float => write!(f, "F"),
+            Self::Integer => write!(f, "I"),
+            Self::Long => write!(f, "J"),
+            Self::Short => write!(f, "S"),
+            Self::Boolean => write!(f, "Z"),
             Self::Object(obj) => write!(f, "L{};", obj),
         }
     }
@@ -134,10 +133,15 @@ impl<'a> FieldDescriptor<'a> {
     }
 }
 
-impl<'a> fmt::Display for FieldDescriptor<'a> {
+impl fmt::Display for FieldDescriptor<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         if self.dimensions > 0 {
-            write!(f, "{}{}", "[".repeat(self.dimensions as usize), self.field_type)
+            write!(
+                f,
+                "{}{}",
+                "[".repeat(self.dimensions as usize),
+                self.field_type
+            )
         } else {
             write!(f, "{}", self.field_type)
         }
@@ -184,7 +188,7 @@ pub enum ReturnDescriptor<'a> {
     Return(FieldDescriptor<'a>),
     Void,
 }
-impl<'a> fmt::Display for ReturnDescriptor<'a> {
+impl fmt::Display for ReturnDescriptor<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
             Self::Void => f.write_char('V'),
@@ -221,7 +225,7 @@ pub struct MethodDescriptor<'a> {
     pub return_type: ReturnDescriptor<'a>,
 }
 
-impl<'a> fmt::Display for MethodDescriptor<'a> {
+impl fmt::Display for MethodDescriptor<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         f.write_char('(')?;
 

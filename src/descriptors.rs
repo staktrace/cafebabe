@@ -55,7 +55,7 @@ impl ClassName<'_> {
 impl<'a> fmt::Display for ClassName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let segments: Vec<Cow<'a, str>> = self.segments.iter().map(|s| s.name.clone()).collect();
-        write!(f, "{};", segments.join("/"))
+        write!(f, "{}", segments.join("/"))
     }
 }
 

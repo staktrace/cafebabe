@@ -356,6 +356,9 @@ mod tests {
 
         assert!(parameters.next().is_none());
         assert_eq!(return_type, ReturnDescriptor::Void);
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -375,6 +378,9 @@ mod tests {
         );
         assert!(parameters.next().is_none());
         assert_eq!(return_type, ReturnDescriptor::Void);
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -393,6 +399,9 @@ mod tests {
                 field_type: FieldType::Long
             }),
         );
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -461,6 +470,9 @@ mod tests {
         );
         assert!(parameters.next().is_none());
         assert_eq!(return_type, ReturnDescriptor::Void);
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -492,6 +504,9 @@ mod tests {
         );
         assert!(parameters.next().is_none());
         assert_eq!(return_type, ReturnDescriptor::Void);
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -573,6 +588,9 @@ mod tests {
         );
         assert!(parameters.next().is_none());
         assert_eq!(return_type, ReturnDescriptor::Void);
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -603,6 +621,9 @@ mod tests {
                 }),
             }),
         );
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -641,6 +662,9 @@ mod tests {
         );
         assert!(parameters.next().is_none());
         assert_eq!(return_type, ReturnDescriptor::Void);
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]
@@ -659,6 +683,9 @@ mod tests {
                 field_type: FieldType::Long,
             })
         );
+
+        let roundtrip = format!("{}", parse_method_descriptor(&chars, 0).unwrap());
+        assert_eq!(roundtrip, chars);
     }
 
     #[test]

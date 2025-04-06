@@ -55,7 +55,7 @@ impl<'a> ClassName<'a> {
 impl<'a> fmt::Display for ClassName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let segments: Vec<Cow<'a, str>> = self.segments.iter().map(|s| s.name.clone()).collect();
-        write!(f, "{}", segments.join("/"))
+        write!(f, "{};", segments.join("/"))
     }
 }
 
@@ -135,16 +135,12 @@ impl<'a> FieldDescriptor<'a> {
 
 impl fmt::Display for FieldDescriptor<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        if self.dimensions > 0 {
-            write!(
-                f,
-                "{}{}",
-                "[".repeat(self.dimensions as usize),
-                self.field_type
-            )
-        } else {
-            write!(f, "{}", self.field_type)
-        }
+        write!(
+            f,
+            "{}{}",
+            "[".repeat(self.dimensions as usize),
+            self.field_type
+        )
     }
 }
 

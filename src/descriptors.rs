@@ -1,4 +1,8 @@
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    fmt::{self, Write},
+};
+
 
 use crate::ParseError;
 
@@ -49,6 +53,12 @@ impl<'a> ClassName<'a> {
             .fold(0, |sum, segment| sum + segment.name.len() + 1)
     }
 }
+impl<'a> fmt::Display for ClassName<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        let segments : Vec<Cow<'a, str>> = self.segments.iter().map(|s| s.name.clone()).collect();
+        write!(f, "{}", segments.join("/"))
+    }
+}
 
 // Returns the classname descriptor at the start of the given data, and ignores anything following.
 // Returns an error if there was no such classname.
@@ -96,6 +106,22 @@ impl<'a> FieldType<'a> {
     }
 }
 
+impl<'a> fmt::Display for FieldType<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Self::Byte     => write!(f, "B"),
+            Self::Char     => write!(f, "C"),
+            Self::Double   => write!(f, "D"),
+            Self::Float    => write!(f, "F"),
+            Self::Integer  => write!(f, "I"),
+            Self::Long     => write!(f, "J"),
+            Self::Short    => write!(f, "S"),
+            Self::Boolean  => write!(f, "Z"),
+            Self::Object(obj) => write!(f, "L{};", obj),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct FieldDescriptor<'a> {
     pub dimensions: u8,
@@ -105,6 +131,16 @@ pub struct FieldDescriptor<'a> {
 impl<'a> FieldDescriptor<'a> {
     fn byte_len(&self) -> usize {
         (self.dimensions as usize) + self.field_type.byte_len()
+    }
+}
+
+impl<'a> fmt::Display for FieldDescriptor<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        if self.dimensions > 0 {
+            write!(f, "{}{}", "[".repeat(self.dimensions as usize), self.field_type)
+        } else {
+            write!(f, "{}", self.field_type)
+        }
     }
 }
 
@@ -148,6 +184,14 @@ pub enum ReturnDescriptor<'a> {
     Return(FieldDescriptor<'a>),
     Void,
 }
+impl<'a> fmt::Display for ReturnDescriptor<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        match self {
+            Self::Void => f.write_char('V'),
+            Self::Return(field) => write!(f, "{}", field),
+        }
+    }
+}
 
 impl<'a> ReturnDescriptor<'a> {
     fn byte_len(&self) -> usize {
@@ -175,6 +219,18 @@ fn parse_return_descriptor<'a>(
 pub struct MethodDescriptor<'a> {
     pub parameters: Vec<FieldDescriptor<'a>>,
     pub return_type: ReturnDescriptor<'a>,
+}
+
+impl<'a> fmt::Display for MethodDescriptor<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        f.write_char('(')?;
+
+        for param in &self.parameters {
+            write!(f, "{}", param)?;
+        }
+
+        write!(f, "){}", self.return_type)
+    }
 }
 
 impl<'a> MethodDescriptor<'a> {

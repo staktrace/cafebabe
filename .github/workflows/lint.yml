@@ -14,7 +14,7 @@ jobs:
       - name: Get latest stable Rust
         run: rustup toolchain install stable --profile default
       - name: Check out source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Check formatting
         run: cargo fmt -v -- --check
   clippy:
@@ -26,6 +26,6 @@ jobs:
       - name: Get clippy
         run: rustup component add clippy
       - name: Check out source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Check clippy lints
         run: cargo clippy --all --no-deps

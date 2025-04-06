@@ -14,7 +14,7 @@ jobs:
       - name: Get latest stable Rust
         run: rustup toolchain install stable --profile minimal
       - name: Check out source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Run tests
         run: cargo test --all
   beta:
@@ -24,7 +24,7 @@ jobs:
       - name: Get latest beta Rust
         run: rustup toolchain install beta --profile minimal
       - name: Check out source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Check compilation
         run: cargo check
   nightly:
@@ -34,6 +34,6 @@ jobs:
       - name: Get latest nightly Rust
         run: rustup toolchain install nightly --profile minimal
       - name: Check out source
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Check compilation
         run: cargo check

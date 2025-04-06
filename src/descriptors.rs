@@ -42,7 +42,7 @@ pub struct ClassName<'a> {
     pub segments: Vec<UnqualifiedSegment<'a>>,
 }
 
-impl<'a> ClassName<'a> {
+impl ClassName<'_> {
     fn byte_len(&self) -> usize {
         self.segments
             .iter()
@@ -87,7 +87,7 @@ pub enum FieldType<'a> {
     Object(ClassName<'a>),
 }
 
-impl<'a> FieldType<'a> {
+impl FieldType<'_> {
     fn byte_len(&self) -> usize {
         match self {
             FieldType::Object(class_name) => 1 + class_name.byte_len(),
@@ -102,7 +102,7 @@ pub struct FieldDescriptor<'a> {
     pub field_type: FieldType<'a>,
 }
 
-impl<'a> FieldDescriptor<'a> {
+impl FieldDescriptor<'_> {
     fn byte_len(&self) -> usize {
         (self.dimensions as usize) + self.field_type.byte_len()
     }
@@ -149,7 +149,7 @@ pub enum ReturnDescriptor<'a> {
     Void,
 }
 
-impl<'a> ReturnDescriptor<'a> {
+impl ReturnDescriptor<'_> {
     fn byte_len(&self) -> usize {
         match self {
             Self::Return(d) => d.byte_len(),
@@ -177,7 +177,7 @@ pub struct MethodDescriptor<'a> {
     pub return_type: ReturnDescriptor<'a>,
 }
 
-impl<'a> MethodDescriptor<'a> {
+impl MethodDescriptor<'_> {
     fn byte_len(&self) -> usize {
         1 + self
             .parameters
@@ -217,7 +217,7 @@ pub(crate) fn parse_method_descriptor<'a>(
 pub(crate) fn parse_array_descriptor<'a>(
     data: &Cow<'a, str>,
 ) -> Result<Option<FieldDescriptor<'a>>, ParseError> {
-    if data.len() == 0 || data.as_bytes()[0] != b'[' {
+    if data.is_empty() || data.as_bytes()[0] != b'[' {
         return Ok(None);
     }
     let desc = parse_field_descriptor(data, 0)?;

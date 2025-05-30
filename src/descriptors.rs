@@ -1,38 +1,20 @@
 use std::{
     borrow::Cow,
     fmt::{self, Write},
+    ops::Deref,
 };
 
 use crate::ParseError;
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct UnqualifiedSegment<'a> {
-    pub name: Cow<'a, str>,
-}
-
 // Returns the unqualified segment and the following char (either '/' or ';')
 // or an error. This only extracts the unqualified segment at the start of
 // the given data, and ignores anything following.
-fn parse_unqualified_segment<'a>(
-    data: &Cow<'a, str>,
-    start_index: usize,
-) -> Result<(UnqualifiedSegment<'a>, char), ParseError> {
+fn parse_unqualified_segment(data: &str, start_index: usize) -> Result<(&str, char), ParseError> {
     for (ix, c) in data[start_index..].char_indices() {
         match c {
             '/' if ix == 0 => fail!("Unexpected / at start of unqualified segment"),
             ';' if ix == 0 => fail!("Unexpected ; at start of unqualified segment"),
-            '/' | ';' => {
-                let name = match data {
-                    Cow::Borrowed(borrowed_str) => {
-                        Cow::Borrowed(&borrowed_str[start_index..start_index + ix])
-                    }
-                    Cow::Owned(ref owned_str) => {
-                        Cow::Owned(owned_str[start_index..start_index + ix].to_string())
-                    }
-                };
-                let segment = UnqualifiedSegment { name };
-                return Ok((segment, c));
-            }
+            '/' | ';' => return Ok((&data[start_index..start_index + ix], c)),
             '.' | '[' | '<' | '>' => fail!("Disallowed character in unqualified segment"),
             _ => (),
         };
@@ -40,22 +22,34 @@ fn parse_unqualified_segment<'a>(
     fail!("Unterminated unqualified segment");
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct ClassName<'a> {
-    pub segments: Vec<UnqualifiedSegment<'a>>,
-}
+/// Represents a valid binary class or interface name in the syntax of
+/// the [JVM Spec](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.2.1).
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ClassName<'a>(Cow<'a, str>);
 
-impl ClassName<'_> {
-    fn byte_len(&self) -> usize {
-        self.segments
-            .iter()
-            .fold(0, |sum, segment| sum + segment.name.len() + 1)
+impl<'a> From<ClassName<'a>> for Cow<'a, str> {
+    fn from(value: ClassName<'a>) -> Self {
+        value.0
     }
 }
+
+impl<'a> Deref for ClassName<'a> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'a> ClassName<'a> {
+    fn byte_len(&self) -> usize {
+        self.0.len() + 1 // one for the terminating ';'
+    }
+}
+
 impl<'a> fmt::Display for ClassName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let segments: Vec<Cow<'a, str>> = self.segments.iter().map(|s| s.name.clone()).collect();
-        write!(f, "{}", segments.join("/"))
+        write!(f, "{}", self.0)
     }
 }
 
@@ -65,19 +59,20 @@ fn parse_class_descriptor<'a>(
     data: &Cow<'a, str>,
     index: usize,
 ) -> Result<ClassName<'a>, ParseError> {
-    let mut segments = vec![];
-    let mut remaining_index = index;
+    let mut next_index = index;
     loop {
-        match parse_unqualified_segment(data, remaining_index)? {
+        match parse_unqualified_segment(data, next_index)? {
             (segment, ';') => {
-                segments.push(segment);
-                return Ok(ClassName { segments });
+                return Ok(ClassName(match data {
+                    Cow::Borrowed(data) => {
+                        Cow::Borrowed(&data[index..(next_index + segment.len())])
+                    }
+                    Cow::Owned(data) => {
+                        Cow::Owned(data[index..(next_index + segment.len())].to_string())
+                    }
+                }))
             }
-            (segment, '/') => {
-                remaining_index += segment.name.len() + 1;
-                segments.push(segment);
-                continue;
-            }
+            (segment, '/') => next_index += segment.len() + 1,
             _ => panic!("Got unexpected return value from parse_unqualified_segment"),
         }
     }
@@ -487,19 +482,7 @@ mod tests {
             parameters.next().unwrap(),
             FieldDescriptor {
                 dimensions: 0,
-                field_type: FieldType::Object(ClassName {
-                    segments: vec![
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("java")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("lang")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("Object")
-                        },
-                    ],
-                }),
+                field_type: FieldType::Object(ClassName("java/lang/Object".into())),
             },
         );
         assert!(parameters.next().is_none());
@@ -521,19 +504,7 @@ mod tests {
             parameters.next().unwrap(),
             FieldDescriptor {
                 dimensions: 0,
-                field_type: FieldType::Object(ClassName {
-                    segments: vec![
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("java")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("lang")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("Object")
-                        },
-                    ],
-                }),
+                field_type: FieldType::Object(ClassName("java/lang/Object".into())),
             },
         );
         assert!(parameters.next().is_none());
@@ -552,38 +523,14 @@ mod tests {
             parameters.next().unwrap(),
             FieldDescriptor {
                 dimensions: 0,
-                field_type: FieldType::Object(ClassName {
-                    segments: vec![
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("java")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("lang")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("Object")
-                        },
-                    ],
-                }),
+                field_type: FieldType::Object(ClassName("java/lang/Object".into())),
             },
         );
         assert_eq!(
             parameters.next().unwrap(),
             FieldDescriptor {
                 dimensions: 0,
-                field_type: FieldType::Object(ClassName {
-                    segments: vec![
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("java")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("lang")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("String")
-                        },
-                    ],
-                }),
+                field_type: FieldType::Object(ClassName("java/lang/String".into())),
             },
         );
         assert!(parameters.next().is_none());
@@ -606,19 +553,7 @@ mod tests {
             return_type,
             ReturnDescriptor::Return(FieldDescriptor {
                 dimensions: 0,
-                field_type: FieldType::Object(ClassName {
-                    segments: vec![
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("java")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("lang")
-                        },
-                        UnqualifiedSegment {
-                            name: Cow::Borrowed("Object")
-                        },
-                    ],
-                }),
+                field_type: FieldType::Object(ClassName("java/lang/Object".into())),
             }),
         );
 

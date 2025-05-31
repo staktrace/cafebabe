@@ -12,11 +12,12 @@ pub mod error;
 pub mod attributes;
 pub mod bytecode;
 pub mod constant_pool;
-pub mod descriptors;
-pub mod names;
+mod descriptors;
+mod names;
 
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use std::ops::Deref;
 
 #[cfg(not(feature = "threadsafe"))]
@@ -24,15 +25,14 @@ use std::rc::Rc;
 #[cfg(feature = "threadsafe")]
 use std::sync::Arc;
 
+pub use descriptors::*;
+
 use crate::attributes::{read_attributes, AttributeData, AttributeInfo};
 use crate::constant_pool::{
     read_constant_pool, read_cp_classinfo, read_cp_classinfo_opt, read_cp_utf8, ConstantPoolEntry,
     ConstantPoolIter,
 };
-use crate::descriptors::{
-    parse_field_descriptor, parse_method_descriptor, FieldDescriptor, MethodDescriptor,
-    ReturnDescriptor,
-};
+use crate::descriptors::{parse_field_descriptor, parse_method_descriptor};
 pub use crate::error::ParseError;
 use crate::names::{is_unqualified_method_name, is_unqualified_name};
 
@@ -94,12 +94,15 @@ fn read_interfaces<'a>(
     bytes: &'a [u8],
     ix: &mut usize,
     pool: &[CafeRc<ConstantPoolEntry<'a>>],
-) -> Result<Vec<Cow<'a, str>>, ParseError> {
+) -> Result<Vec<ClassName<'a>>, ParseError> {
     let count = read_u2(bytes, ix)?;
     let mut interfaces = Vec::with_capacity(count.into());
     for i in 0..count {
-        interfaces
-            .push(read_cp_classinfo(bytes, ix, pool).map_err(|e| err!(e, "interface {}", i))?);
+        interfaces.push(
+            read_cp_classinfo(bytes, ix, pool)
+                .and_then(ClassName::try_from)
+                .map_err(|e| err!(e, "interface {}", i))?,
+        );
     }
     Ok(interfaces)
 }
@@ -320,9 +323,9 @@ pub struct ClassFile<'a> {
     pub minor_version: u16,
     constant_pool: Vec<CafeRc<ConstantPoolEntry<'a>>>,
     pub access_flags: ClassAccessFlags,
-    pub this_class: Cow<'a, str>,
-    pub super_class: Option<Cow<'a, str>>,
-    pub interfaces: Vec<Cow<'a, str>>,
+    pub this_class: ClassName<'a>,
+    pub super_class: Option<ClassName<'a>>,
+    pub interfaces: Vec<ClassName<'a>>,
     pub fields: Vec<FieldInfo<'a>>,
     pub methods: Vec<MethodInfo<'a>>,
     pub attributes: Vec<AttributeInfo<'a>>,
@@ -350,11 +353,11 @@ impl Default for ParseOptions {
 
 impl ParseOptions {
     /// Turns on or off parsing of bytecode from the Code attributes of methods. If parsing
-    /// is enabled, the CodeData structure's optional bytecode field will be populated
-    /// (or parsing will fail entirely if bytecode parsing failed). If parsing is disabled,
-    /// the CodeData structure's optional bytecode field will be set to None. Parsing is
-    /// enabled by default, but can be disabled to speed up parsing in cases where the
-    /// parsed bytecode is not needed.
+    /// is enabled, the [CodeData](crate::attributes::CodeData) structure's optional bytecode
+    /// field will be populated (or parsing will fail entirely if bytecode parsing failed).
+    /// If parsing is disabled, the [CodeData](crate::attributes::CodeData) structure's optional
+    /// bytecode field will be set to None. Parsing is enabled by default, but can be disabled
+    /// to speed up parsing in cases where the parsed bytecode is not needed.
     pub fn parse_bytecode(&mut self, parse: bool) -> &mut ParseOptions {
         self.parse_bytecode = parse;
         self
@@ -394,10 +397,13 @@ pub fn parse_class_with_options<'a>(
             );
         }
     }
-    let this_class =
-        read_cp_classinfo(raw_bytes, &mut ix, &constant_pool).map_err(|e| err!(e, "this_class"))?;
+    let this_class = read_cp_classinfo(raw_bytes, &mut ix, &constant_pool)
+        .and_then(ClassName::try_from)
+        .map_err(|e| err!(e, "this_class"))?;
     let super_class = read_cp_classinfo_opt(raw_bytes, &mut ix, &constant_pool)
+        .and_then(|name| name.map(ClassName::try_from).transpose())
         .map_err(|e| err!(e, "super_class"))?;
+
     let interfaces = read_interfaces(raw_bytes, &mut ix, &constant_pool)?;
     let fields = read_fields(raw_bytes, &mut ix, &constant_pool, opts)?;
     let methods = read_methods(

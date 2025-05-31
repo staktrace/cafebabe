@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    convert::TryFrom,
     fmt::{self, Write},
     ops::Deref,
 };
@@ -9,15 +10,15 @@ use crate::ParseError;
 // Returns the unqualified segment and the following char (either '/' or ';')
 // or an error. This only extracts the unqualified segment at the start of
 // the given data, and ignores anything following.
-fn parse_unqualified_segment(data: &str, start_index: usize) -> Result<(&str, char), ParseError> {
-    let mut chars = data[start_index..].char_indices();
+fn parse_unqualified_segment(data: &str) -> Result<(&str, char), ParseError> {
+    let mut chars = data.char_indices();
     match chars.next() {
-        Some((_, '/')) => fail!("Unexpected / at start of unqualified segment"),
-        Some((_, ';')) => fail!("Unexpected ; at start of unqualified segment"),
+        Some((_, '/')) => fail!("Unexpected '/' at start of unqualified segment"),
+        Some((_, ';')) => fail!("Unexpected ';' at start of unqualified segment"),
         mut curr => {
             while let Some((i, c)) = curr {
                 match c {
-                    '/' | ';' => return Ok((&data[start_index..start_index + i], c)),
+                    '/' | ';' => return Ok((&data[..i], c)),
                     '.' | '[' | '<' | '>' => fail!("Disallowed character in unqualified segment"),
                     _ => curr = chars.next(), // ~ keep going
                 }
@@ -28,9 +29,40 @@ fn parse_unqualified_segment(data: &str, start_index: usize) -> Result<(&str, ch
 }
 
 /// Represents a valid binary class or interface name in the syntax of
-/// the (JLS)[https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.2.1].
+/// the [JLS](https://docs.oracle.com/javase/specs/jvms/se21/html/jvms-4.html#jvms-4.2.1).
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ClassName<'a>(Cow<'a, str>);
+
+impl<'a> TryFrom<Cow<'a, str>> for ClassName<'a> {
+    type Error = ParseError;
+
+    // `value` (as a whole) must consist of a sequence of unqualified segements
+    fn try_from(value: Cow<'a, str>) -> Result<Self, Self::Error> {
+        let mut chars = value.chars();
+        let mut last_c = match chars.next() {
+            None => fail!("Empty class name"),
+            Some('/') => fail!("Invalid '/' at start of class name"),
+            Some(c) => c,
+        };
+        for c in chars {
+            match c {
+                '.' | '[' | '<' | '>' | ';' => {
+                    fail!("Disallowed character in class name");
+                }
+                '/' => {
+                    if last_c == c {
+                        fail!("invalid '//' sequence in class name");
+                    }
+                    last_c = c;
+                }
+                _ => {
+                    last_c = c;
+                }
+            }
+        }
+        Ok(Self(value))
+    }
+}
 
 impl<'a> From<ClassName<'a>> for Cow<'a, str> {
     fn from(value: ClassName<'a>) -> Self {
@@ -66,7 +98,7 @@ fn parse_class_descriptor<'a>(
 ) -> Result<ClassName<'a>, ParseError> {
     let mut next_index = index;
     loop {
-        match parse_unqualified_segment(data, next_index)? {
+        match parse_unqualified_segment(&data[next_index..])? {
             (segment, ';') => {
                 return Ok(ClassName(match data {
                     Cow::Borrowed(data) => {
@@ -123,6 +155,7 @@ impl fmt::Display for FieldType<'_> {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct FieldDescriptor<'a> {
+    /// Non-zero for array types denoting the arrays dimensions, otherwise `0`.
     pub dimensions: u8,
     pub field_type: FieldType<'a>,
 }

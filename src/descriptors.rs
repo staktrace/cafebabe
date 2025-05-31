@@ -43,7 +43,7 @@ impl<'a> Deref for ClassName<'a> {
 
 impl<'a> ClassName<'a> {
     fn byte_len(&self) -> usize {
-        self.0.len() + 1 // one for the terminating ';'
+        self.0.len()
     }
 }
 
@@ -94,7 +94,8 @@ pub enum FieldType<'a> {
 impl FieldType<'_> {
     fn byte_len(&self) -> usize {
         match self {
-            FieldType::Object(class_name) => 1 + class_name.byte_len(),
+            // +1 for the beginning 'L'; +1 for the terminating ';'
+            FieldType::Object(class_name) => 2 + class_name.byte_len(),
             _ => 1,
         }
     }

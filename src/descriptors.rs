@@ -68,14 +68,14 @@ fn parse_class_descriptor<'a>(
     loop {
         match parse_unqualified_segment(data, next_index)? {
             (segment, ';') => {
-                return dbg!(Ok(ClassName(match data {
+                return Ok(ClassName(match data {
                     Cow::Borrowed(data) => {
                         Cow::Borrowed(&data[index..(next_index + segment.len())])
                     }
                     Cow::Owned(data) => {
                         Cow::Owned(data[index..(next_index + segment.len())].to_string())
                     }
-                })))
+                }))
             }
             (segment, '/') => next_index += segment.len() + 1,
             _ => panic!("Got unexpected return value from parse_unqualified_segment"),

@@ -139,6 +139,7 @@ impl fmt::Display for FieldType<'_> {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct FieldDescriptor<'a> {
+    /// Non-zero for array types denoting the arrays dimensions, otherwise `0`.
     pub dimensions: u8,
     pub field_type: FieldType<'a>,
 }

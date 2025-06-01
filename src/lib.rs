@@ -354,11 +354,11 @@ impl Default for ParseOptions {
 
 impl ParseOptions {
     /// Turns on or off parsing of bytecode from the Code attributes of methods. If parsing
-    /// is enabled, the CodeData structure's optional bytecode field will be populated
-    /// (or parsing will fail entirely if bytecode parsing failed). If parsing is disabled,
-    /// the CodeData structure's optional bytecode field will be set to None. Parsing is
-    /// enabled by default, but can be disabled to speed up parsing in cases where the
-    /// parsed bytecode is not needed.
+    /// is enabled, the [CodeData](crate::attributes::CodeData) structure's optional bytecode
+    /// field will be populated (or parsing will fail entirely if bytecode parsing failed).
+    /// If parsing is disabled, the [CodeData](crate::attributes::CodeData) structure's optional
+    /// bytecode field will be set to None. Parsing is enabled by default, but can be disabled
+    /// to speed up parsing in cases where the parsed bytecode is not needed.
     pub fn parse_bytecode(&mut self, parse: bool) -> &mut ParseOptions {
         self.parse_bytecode = parse;
         self

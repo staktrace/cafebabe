@@ -10,18 +10,19 @@ use crate::ParseError;
 // Returns the length of the unqualified segment and the following char
 // ('/', ';', or None) or an error. This only extracts the unqualified
 // segment at the start of the given data, and ignores anything following.
+// Returns None if no unqualified segment terminator was found.
 #[inline(always)]
-fn parse_unqualified_segment(data: &str) -> Result<(usize, Option<char>), ParseError> {
+fn parse_unqualified_segment(data: &str) -> Result<Option<(usize, char)>, ParseError> {
     for (ix, c) in data.char_indices() {
         match c {
             '/' if ix == 0 => fail!("Unexpected '/' at start of unqualified segment"),
             ';' if ix == 0 => fail!("Unexpected ';' at start of unqualified segment"),
-            '/' | ';' => return Ok((ix, Some(c))),
+            '/' | ';' => return Ok(Some((ix, c))),
             '.' | '[' | '<' | '>' => fail!("Disallowed character in unqualified segment"),
             _ => (),
         };
     }
-    Ok((data.len(), None))
+    Ok(None)
 }
 
 /// Represents a valid binary class or interface name in the syntax of
@@ -37,9 +38,9 @@ impl<'a> TryFrom<Cow<'a, str>> for ClassName<'a> {
         let mut index = 0;
         loop {
             match parse_unqualified_segment(&value[index..])? {
-                (_, None) => break,
-                (_, Some(';')) => fail!("Disallowed ';' in class name"),
-                (segment_len, Some('/')) => index += segment_len + 1,
+                None => break,
+                Some((_, ';')) => fail!("Disallowed ';' in class name"),
+                Some((segment_len, '/')) => index += segment_len + 1,
                 _ => panic!("Got unexpected return value from parse_unqualified_segment"),
             }
         }
@@ -82,7 +83,7 @@ fn parse_class_descriptor<'a>(
     let mut next_index = index;
     loop {
         match parse_unqualified_segment(&data[next_index..])? {
-            (segment_len, Some(';')) => {
+            Some((segment_len, ';')) => {
                 return Ok(ClassName(match data {
                     Cow::Borrowed(data) => Cow::Borrowed(&data[index..(next_index + segment_len)]),
                     Cow::Owned(data) => {
@@ -90,8 +91,8 @@ fn parse_class_descriptor<'a>(
                     }
                 }))
             }
-            (segment_len, Some('/')) => next_index += segment_len + 1,
-            (_, None) => fail!("Unterminated unqualified segment"),
+            Some((segment_len, '/')) => next_index += segment_len + 1,
+            None => fail!("Unterminated unqualified segment"),
             _ => panic!("Got unexpected return value from parse_unqualified_segment"),
         }
     }

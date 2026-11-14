@@ -260,8 +260,16 @@ impl<'a> ConstantPoolEntry<'a> {
             ConstantPoolEntry::NameAndType(x, y) => {
                 x.ensure_type(ConstantPoolEntryTypes::UTF8)?;
                 peel!(x).validate_unqualified_name()?;
-                y.ensure_type(ConstantPoolEntryTypes::UTF8)
-                // y is validated as part of FieldRef/MethodRef/InterfaceMethodRef/Dynamic/InvokeDynamic pool item validation
+                // The descriptor is fully validated as a field/method descriptor by the
+                // FieldRef/MethodRef/InterfaceMethodRef/Dynamic/InvokeDynamic entries that
+                // reference it. However, a NameAndType may be referenced only from
+                // elsewhere (e.g. the EnclosingMethod attribute) or not at all (the
+                // constant pool iterator still exposes it), so we additionally check here
+                // that the descriptor is a valid string (not Utf8Bytes). This is redundant
+                // for referenced entries but avoids a panic in utf8() for the others.
+                y.ensure_type(ConstantPoolEntryTypes::UTF8)?;
+                peel!(y).str()?;
+                Ok(())
             }
             ConstantPoolEntry::MethodHandle(x, y) => y.ensure_type(match x {
                 ReferenceKind::GetField

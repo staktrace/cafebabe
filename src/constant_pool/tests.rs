@@ -254,10 +254,13 @@ fn test_validate_name_and_type() {
         wrap(Utf8(Cow::from("someUnqualifiedName"))),
         wrap(Utf8(Cow::from("anything goes"))),
     ));
-    assert_validate_passes!(NameAndType(
-        wrap(Utf8(Cow::from("someUnqualifiedName"))),
-        wrap(Utf8Bytes(&[])),
-    ));
+    assert_validate_fails!(
+        NameAndType(
+            wrap(Utf8(Cow::from("someUnqualifiedName"))),
+            wrap(Utf8Bytes(&[])),
+        ),
+        "Attempting to get utf-8 data from non-utf8 constant pool entry!"
+    );
 
     assert_validate_fails!(
         NameAndType(

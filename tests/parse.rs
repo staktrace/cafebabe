@@ -63,3 +63,17 @@ fn find_classes<P: AsRef<Path>>(path: P, dst: &mut Vec<PathBuf>) -> io::Result<(
     }
     Ok(())
 }
+
+#[test]
+fn parse_nameandtype_utf8bytes_descriptor_returns_err() {
+    // Regression test for https://github.com/staktrace/cafebabe/issues/61
+    // A NameAndType whose descriptor is not valid modified UTF-8 (Utf8Bytes),
+    // referenced only from EnclosingMethod, must return Err rather than panic.
+    let hex = "cafebabe000000340009010001410700010100106a6176612f6c616e672f4f626a65637407000301000f456e636c6f73696e674d6574686f640100016d010001ff0c00060007002100020004000000000000000100050000000400040008";
+    let bytes: Vec<u8> = (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap())
+        .collect();
+    assert_eq!(bytes.len(), 94);
+    assert!(cafebabe::parse_class(&bytes).is_err());
+}
